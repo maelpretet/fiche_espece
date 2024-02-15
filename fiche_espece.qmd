@@ -256,22 +256,6 @@ for(i in 1:3) {
 
 
 
-::: {.panel-tabset}
-```{r}
-#| results: asis
-#| fig-width: 6
-#| fig-height: 4
-for(i in 1:3) {
-  cat(sprintf("\n\n#### Carte %d\n\n", i))
-
-  print(carte(data = df_jardin, groupe = lst_param[[i]][[1]],
-              couleurs = lst_param[[i]][[2]], labels = cat,
-              legend.title = lst_param[[i]][[3]]) )
-}
-```
-:::
-
-
 ```{r}
 df_gregarite = data.frame(nb_idv = as.numeric(names(summary(as.factor((df_sp%>%filter(abondance != 0))$abondance)))),
                           frequence = summary(as.factor((df_sp%>%filter(abondance != 0))$abondance)))
