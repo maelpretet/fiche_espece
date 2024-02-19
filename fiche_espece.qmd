@@ -24,6 +24,7 @@ library(dplyr)
 library(echarts4r)
 library(ggplot2)
 library(here)
+library(igraph)
 library(knitr)
 library(plotly)
 library(RColorBrewer)
@@ -441,4 +442,76 @@ for (i in 1:9) {
 ```{r}
 kable(fabric_tab)
 ```
+
+```{r}
+all_names = unique(df_all_sp$nom_espece)
+names_no_sp = all_names[-which(all_names == sp_name)]
+
+test_hierarchy = data.frame(from = rep(sp_name, length(df_oui)),
+                            to = names(df_oui),
+                            value = as.double(df_oui)) %>%
+  mutate(seuil = if_else(value > 30, "red", "grey"))
+test_vertices = data.frame(name = unique(c(as.character(test_hierarchy$from), as.character(test_hierarchy$to))) )
+
+mygraph <- graph_from_data_frame(test_hierarchy, vertices=test_vertices )
+# This is a network object, you visualize it as a network like shown in the network section!
+
+E(mygraph)$color = test_hierarchy$seuil
+V(mygraph)$label.cex = 0.5
+
+# With igraph: 
+plot(mygraph, edge.arrow.size=0, vertex.size=2)
+
+```
+
+```{r}
+plot(mygraph, edge.arrow.size=0, vertex.size=2, layout=layout.circle, main="circle")
+```
+
+```{r}
+plot(mygraph, vertex.label="", edge.arrow.size=0, vertex.size=2, layout=layout.sphere, main="sphere")
+```
+
+
+```{python}
+import mysql.connector
+import os
+import pandas
+import pymysql
+
+from dotenv import load_dotenv
+
+```
+
+
+```{python}
+load_dotenv()
+
+db_user = os.getenv('DB_USER')
+db_password = os.getenv('DB_PASSWORD')
+db_host = os.getenv('DB_HOST')
+db_port = os.getenv('DB_PORT')
+
+```
+
+
+```{python}
+conn = mysql.connector.connect(
+    host=os.getenv('DB_HOST'),
+    user=os.getenv('DB_USER'),
+    password=os.getenv('DB_PASSWORD'),
+    port=os.getenv('DB_PORT'),
+    database="spgp"
+)
+```
+
+```{python}
+# pandas.read_sql_query(sql='SQL/export_a_plat_OPJ.sql', con = conn)
+df = pandas.read_sql_query('''SELECT * FROM `spj_papillons_export_donnes_a_plat`''', con=conn)
+```
+
+
+(query = read_sql_query("SQL/export_a_plat_OPJ.sql"),
+                                    database_name = "spgp") 
+
 
