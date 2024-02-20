@@ -55,20 +55,24 @@ source("fonctions/function_import_df.R")
 ```
 
 ```{r}
-# Data frame utilisés et fomtre
+# Data frame utilisés
+
+# Df de toutes les espèces
 df_all_sp = import_from_mosaic(query = read_sql_query("SQL/export_a_plat_OPJ.sql"),
                                     database_name = "spgp") %>%
-    filter(!is.na(dept_code),
-           str_length(dept_code)==2,
-           annee >= 2018) %>%
+    filter(!is.na(dept_code),         # suppression des départements nuls
+           str_length(dept_code)==2,  # suppression des drom-com
+           annee >= 2018) %>%         # suppression des données avant 2018
     mutate(an_sem = if_else(as.numeric(num_semaine) < 10,
                             paste0(annee, "-S0", num_semaine),
                             paste0(annee, "-S", num_semaine)) ) %>%
-    left_join(reg_dep, by = c("dept_code" = "code_departement"))
+    left_join(reg_dep, by = c("dept_code" = "code_departement")) # ajout des départements
 
+# Df d'une espèce en particulier
 df_sp = df_all_sp %>%
   filter(nom_espece == sp_name)
 
+# Df abondance par espèce
 df_repartition = df_all_sp %>% 
   group_by(nom_espece) %>% 
   summarise(sum_ab = sum(abondance),
