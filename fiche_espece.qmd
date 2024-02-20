@@ -10,9 +10,20 @@ execute:
 ---
 
 ```{r}
+# Variables constantes
 sp_name = "Amaryllis"
 year_colors = c("#eb6ecf", "#8a6eeb", "#6e9deb", "#6eebb4", "#ebbc6e", "#eb816e", "#d01456")
 color_flag = "red"
+#liste principale des papillons de l'observatoire
+liste_principale <- c("Machaons","Flambés", "Demi-deuils",
+                      "Paon du jour", "Vulcain", "Belle-dame", "Petites tortues",
+                      "Robert-le-diable", "Tabac d'Espagne", "Silène", "Sylvains",
+                      "Souci", "Aurores", "Piérides blanches","Gazé","Citrons","Amaryllis",
+                      "Myrtil", "Procris", "Mégères", "Tircis", "Lycènes bleus",
+                      "Argus verts", "Brun des pélargoniums", "Cuivré", "Hespérides tachetées",
+                      "Hespérides orangées", "Moro-sphinx")
+# Départements avec numéro et région
+reg_dep = read.csv2("doc/departements-france.csv", sep=",")
 ```
 
 ## `{r} sp_name`
@@ -41,18 +52,6 @@ readRenviron(".env")
 source("fonctions/carte.R")
 source("fonctions/function_import_from_mosaic.R")
 source("fonctions/function_import_df.R")
-```
-
-```{r}
-reg_dep = read.csv2("doc/departements-france.csv", sep=",")
-#liste principale des papillons de l'observatoire
-liste_principale <- c("Machaons","Flambés", "Demi-deuils",
-                      "Paon du jour", "Vulcain", "Belle-dame", "Petites tortues",
-                      "Robert-le-diable", "Tabac d'Espagne", "Silène", "Sylvains",
-                      "Souci", "Aurores", "Piérides blanches","Gazé","Citrons","Amaryllis",
-                      "Myrtil", "Procris", "Mégères", "Tircis", "Lycènes bleus",
-                      "Argus verts", "Brun des pélargoniums", "Cuivré", "Hespérides tachetées",
-                      "Hespérides orangées", "Moro-sphinx")
 ```
 
 ```{r}
@@ -106,6 +105,7 @@ df_sp %>%
     arrange(num_semaine) %>%
     e_charts(num_semaine) %>%
     e_line(sum_ab) %>%
+    # e_bar(sum_ab) %>%
     e_legend(top = "3%") %>%
     e_tooltip(trigger = "axis") %>%
     e_datazoom(x_index = 0, type = "slider", bottom = "3%") %>%
@@ -136,6 +136,17 @@ gg = df_sp %>%
   
 ggplotly(gg)
 ```
+
+
+```{r}
+df_sp %>%
+  mutate(date = as.Date(date_collection)) %>%
+  group_by(date) %>%
+  summarise(sum_ab = sum(abondance)) %>%
+  ggplot() +
+   geom_line(aes(x = date, y = sum_ab))
+```
+
 
 
 ```{r}
@@ -368,7 +379,7 @@ gogo_test = df_tot %>%
   relocate(geometry, .after = last_col()) %>%
   select(!c(n))
 
-gg = ggplot(st_as_sf(gogo_test %>% filter(annee != 2018))) + 
+gg = ggplot(st_as_sf(gogo_test %>% filter(annee == 2018))) + 
     geom_sf(aes(fill = cl_ab, frame = annee), show.legend = "fill") +
     labs(fill = paste0("Abondance en ")) +
     theme_light()+
@@ -457,6 +468,7 @@ mygraph <- graph_from_data_frame(test_hierarchy, vertices=test_vertices )
 # This is a network object, you visualize it as a network like shown in the network section!
 
 E(mygraph)$color = test_hierarchy$seuil
+E(mygraph)$weight = test_hierarchy$value/10
 V(mygraph)$label.cex = 0.5
 
 # With igraph: 
@@ -465,11 +477,12 @@ plot(mygraph, edge.arrow.size=0, vertex.size=2)
 ```
 
 ```{r}
-plot(mygraph, edge.arrow.size=0, vertex.size=2, layout=layout.circle, main="circle")
+plot(mygraph, edge.arrow.size=0, vertex.size=2, layout=layout.circle, main="circle", label.y = 90, vertex.label.dist=0.5)
 ```
 
 ```{r}
-plot(mygraph, vertex.label="", edge.arrow.size=0, vertex.size=2, layout=layout.sphere, main="sphere")
+E(mygraph)$color = "grey"
+plot(mygraph, edge.arrow.size=0, vertex.size=2, layout=layout.sphere, label.y = 90, vertex.label.dist=0.5, edge.width=E(mygraph)$weight)
 ```
 
 
@@ -507,7 +520,7 @@ conn = mysql.connector.connect(
 
 ```{python}
 # pandas.read_sql_query(sql='SQL/export_a_plat_OPJ.sql', con = conn)
-df = pandas.read_sql_query('''SELECT * FROM `spj_papillons_export_donnes_a_plat`''', con=conn)
+# df = pandas.read_sql_query('''SELECT * FROM `spj_papillons_export_donnes_a_plat`''', con=conn)
 ```
 
 
