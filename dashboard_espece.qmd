@@ -1,0 +1,581 @@
+---
+title: "Fiche espèce {{< meta params.sp_name >}} "
+format:
+  dashboard:
+    scrolling: true
+    nav-buttons:
+      - icon: github
+        href: https://github.com/maelpretet/fiche_espece
+params:
+  sp_name: "Apollons"
+execute: 
+  echo: false
+  message : false
+  warning : false
+  error : false
+---
+
+```{r}
+# Variables constantes
+sp_name = params$sp_name
+year_colors = c("#eb6ecf", "#8a6eeb", "#6e9deb", "#6eebb4", "#ebbc6e", "#eb816e", "#d01456")
+color_flag = "red"
+#liste principale des papillons de l'observatoire
+liste_principale <- c("Machaons","Flambés", "Demi-deuils",
+                      "Paon du jour", "Vulcain", "Belle-dame", "Petites tortues",
+                      "Robert-le-diable", "Tabac d'Espagne", "Silène", "Sylvains",
+                      "Souci", "Aurores", "Piérides blanches","Gazé","Citrons","Amaryllis",
+                      "Myrtil", "Procris", "Mégères", "Tircis", "Lycènes bleus",
+                      "Argus verts", "Brun des pélargoniums", "Cuivré", "Hespérides tachetées",
+                      "Hespérides orangées", "Moro-sphinx")
+# Départements avec numéro et région
+reg_dep = read.csv2("data/departements-france.csv", sep=",")
+```
+
+# Observations
+
+```{r}
+# Librairies
+library(cowplot)
+library(dplyr)
+library(echarts4r)
+library(ggplot2)
+library(here)
+library(igraph)
+library(knitr)
+library(plotly)
+library(RColorBrewer)
+library(rlang)
+library(RMySQL)
+library(scales)
+library(stringr)
+library(tibble)
+library(tidyr)
+```
+
+```{r}
+# Fonctions et environnement
+readRenviron(".env")
+source("fonctions/carte.R")
+source("fonctions/function_import_from_mosaic.R")
+source("fonctions/function_import_df.R")
+```
+
+```{r}
+# Data frame utilisés
+
+# Df de toutes les espèces
+df_all_sp = import_from_mosaic(query = read_sql_query("SQL/export_a_plat_OPJ.sql"),
+                                    database_name = "spgp") %>%
+    filter(!is.na(dept_code),         # suppression des départements nuls
+           str_length(dept_code)==2,  # suppression des drom-com
+           annee >= 2018) %>%         # suppression des données avant 2018
+    mutate(an_sem = if_else(as.numeric(num_semaine) < 10,
+                            paste0(annee, "-S0", num_semaine),
+                            paste0(annee, "-S", num_semaine)) ) %>%
+    left_join(reg_dep, by = c("dept_code" = "code_departement")) # ajout des départements
+
+# Df d'une espèce en particulier
+df_sp = df_all_sp %>%
+  filter(nom_espece == sp_name)
+
+# Df abondance par espèce
+df_repartition = df_all_sp %>% 
+  group_by(nom_espece) %>% 
+  summarise(sum_ab = sum(abondance),
+            rel_ab = sum(abondance)/sum(df_all_sp$abondance)) %>%
+  arrange(sum_ab) %>%
+  mutate(couleur = if_else(nom_espece == sp_name, color_flag, "grey"))
+```
+
+
+```{r}
+# Calcul de nombres de base
+nb_obs_rea = nrow(df_sp %>% group_by(an_sem, user_id, jardin_id) %>% summarise(n = n()))
+nb_obs_idv = nrow(df_sp %>% filter(abondance != 0))
+nb_idv_cpt = sum(df_sp %>% filter(abondance != 0) %>% select(abondance))
+nb_jardin = length(unique((df_sp %>% filter(abondance != 0))$jardin_id))
+```
+
+Données cumulées depuis 2018
+
+### Observations
+
+::: {.valuebox icon="eye" color="#ced600"}
+Nombre de fois où au moins un individu a été observé :
+
+`{r} nb_obs_idv`
+:::
+
+::: {.valuebox icon="eye-fill" color="#5bbdd6"}
+Nombre total d'individus observés :
+
+`{r} nb_idv_cpt`
+:::
+
+::: {.valuebox icon="flower3" color="#fc5050"}
+Nombre de jardins dans lesquels au moins un individu a été observé :
+
+`{r} nb_jardin`
+:::
+
+# Graphiques par années
+
+Faire un graphique de superposition des années en echarts4r
+
+```{r}
+df_sp %>%
+    mutate(num_semaine = as.integer(num_semaine)) %>%
+    group_by(annee, num_semaine) %>%
+    summarise(sum_ab = sum(abondance)) %>%
+    arrange(num_semaine) %>%
+    e_charts(num_semaine) %>%       # axe x pour echarts
+    e_line(sum_ab) %>%              # type de représentation pour l'axe y
+    # e_bar(sum_ab) %>%
+    e_legend(top = "3%") %>%
+    e_tooltip(trigger = "axis") %>%
+    e_datazoom(x_index = 0, type = "slider", bottom = "3%") %>%
+    e_toolbox_feature(feature = "saveAsImage") %>%
+    e_toolbox_feature(feature = "dataView", readOnly = TRUE) %>%
+    e_x_axis(name="Semaine de prélèvement",
+             nameLocation = "middle", nameGap= 27) %>%
+    e_grid(bottom = "17%") %>%
+    e_color(color = year_colors) %>%
+    e_y_axis(name="Abondance (nombre total d'individus observés)", nameLocation = 'middle',
+             nameGap= 50) %>%
+    e_title(text = paste("Abondance par semaine selon les années"),
+            textStyle = list(fontSize = list(14)))
+```
+
+
+```{r}
+# Graphique avec slider en ggplot
+gg = df_sp %>%
+    mutate(num_semaine = as.integer(num_semaine)) %>%
+    group_by(annee, num_semaine) %>%
+    summarise(sum_ab = sum(abondance)) %>%
+    arrange(num_semaine) %>%
+  ggplot() +
+    # geom_bar(aes(x=num_semaine, y = sum_ab, frame = annee), stat = 'identity') +
+    geom_line(aes(x=num_semaine, y = sum_ab, frame = annee),
+              color = 'purple') +
+    theme_cowplot()
+  
+ggplotly(gg) %>%
+  animation_opts(transition = 0)
+```
+
+
+```{r}
+df_sp %>%
+  mutate(date = as.Date(date_collection)) %>%
+  group_by(date) %>%
+  summarise(sum_ab = sum(abondance)) %>%
+  ggplot() +
+   # geom_line(aes(x = date, y = sum_ab), color="#8A173A") +
+   geom_bar(aes(x = date, y = sum_ab), color="#8A173A", stat="identity") +
+   theme_cowplot() +
+   scale_x_date(date_labels = "%Y-%b", date_breaks = "9 months") +
+   theme(axis.text.x = element_text(angle = 0, size = 8)) +
+   xlab("Date de collection") +
+   ylab("Abondance")
+```
+ 
+# Répartition par rapport aux autres espèces
+
+```{r}
+df_repartition %>%
+  ggplot() +
+    geom_bar(mapping = aes(x = nom_espece, y = rel_ab, fill = nom_espece),
+             stat = "identity") +
+    scale_x_discrete(limits=df_repartition$nom_espece) +
+    scale_y_continuous(name = "Abondance") +
+    theme_cowplot() +
+    theme(axis.text.x = element_blank(), axis.title.x = element_blank(),
+          axis.ticks.x = element_blank(), axis.line.x = element_blank(),
+          legend.position = "none" ) +
+    scale_fill_manual(breaks = df_repartition$nom_espece,
+                      values = df_repartition$couleur) +
+    annotate("text", label = sp_name, x = 8.8,
+             y = max(df_repartition$rel_ab)*0.8)+
+    annotate("rect", fill = color_flag, xmin = 4, xmax = 6,
+             ymin = max(df_repartition$rel_ab)*0.78,
+             ymax = max(df_repartition$rel_ab)*0.82) +
+    scale_y_continuous(labels = scales::percent_format(accuracy = 1))
+```
+
+# Histogrammes sur les distances des jardins
+
+```{r}
+df_jardin = df_sp %>%
+  filter(abondance != 0) %>%
+  group_by(jardin_id, distance_bois, distance_champs, distance_prairie) %>%
+  summarise(latitude = unique(latitude),
+            longitude = unique(longitude),
+            nobs = n()) %>%
+  filter(!is.na(latitude), !is.na(longitude))
+
+cat <- c("0 m", "50 m", "500 m", "1000 m", "2000 m", "+ 2000 m")
+
+bois = list()
+bois[[1]] <- "distance_bois"
+bois[[2]] <- c("#7ce084", "#2bc259", "#025512", "#b19976", "#785016", "#331f00")
+bois[[3]] <- "Distance bois   "
+
+champ = list()
+champ[[1]] <- "distance_champs"
+champ[[2]] <- c("#9d5d07", "#f5a130", "#fec982", "#82cbfe", "#0078ff", "#0107bc")
+champ[[3]] <- "Distance champ  "
+
+prairie = list()
+prairie[[1]] <- "distance_prairie"
+prairie[[2]] <- c("#700080", "#bc18d4", "#e554fa", "#fabb54", "#f99a00", "#fe4100")
+prairie[[3]] <- "Distance prairie"
+
+lst_param = list(bois, champ, prairie)
+
+```
+
+
+::: {.panel-tabset}
+```{r}
+#| results: asis
+#| fig-width: 6
+#| fig-height: 4
+for(i in 1:3) {
+  cat(sprintf(paste0("\n\n## Histogramme ",lst_param[[i]][[3]],"\n\n")))
+  
+  df_complet = data.frame(distance = cat, mean_ab = 0, sd_ab = 0)
+  names(df_complet)[1] = lst_param[[i]][[1]]
+  
+  df_histo = df_sp %>%
+    filter(abondance != 0) %>%
+    group_by(!!sym(lst_param[[i]][[1]])) %>%
+    summarise_at(vars(abondance),
+               list(mean, sd) ) %>%
+    rename(mean_ab = fn1, sd_ab = fn2) %>%
+    as.data.frame()
+  
+  # if (length(which(!(cat %in% df_histo[,1]))) ) {
+  #   
+  # }
+  
+  if (length(setdiff(cat, df_histo[, lst_param[[i]][[1]]] )) != 0) {
+    df_add = data.frame(distance = setdiff(cat, df_histo[, lst_param[[i]][[1]]] ),
+                        mean_ab = 0, sd_ab = 0)
+    names(df_add)[1] = lst_param[[i]][[1]]
+    df_histo = rbind(df_histo, df_add)
+  }
+  
+  print(df_histo %>%
+    ggplot() +
+      geom_bar(aes(x = !!sym(lst_param[[i]][[1]]), y = mean_ab),
+               stat = 'identity', fill = lst_param[[i]][[2]]) +
+      geom_errorbar(aes(x = !!sym(lst_param[[i]][[1]]),
+                        ymin=mean_ab-sd_ab,
+                        ymax=mean_ab+sd_ab)) +
+      scale_x_discrete(limits=cat) +
+      scale_fill_manual(values = lst_param[[i]][[2]], breaks = cat, drop = FALSE)+
+      xlab(lst_param[[i]][[3]]) +
+      ylab("Nombre moyen d'observations") +
+      theme_cowplot())
+  
+}
+```
+:::
+
+
+::: {.panel-tabset}
+```{r}
+#| results: asis
+#| fig-width: 6
+#| fig-height: 4
+for(i in 1:3) {
+  cat(sprintf(paste0("\n\n## Histogramme ",lst_param[[i]][[3]],"\n\n")))
+  
+  df_tot = df_sp %>%
+    group_by(!!sym(lst_param[[i]][[1]])) %>%
+    summarise(ntot = n()) %>%
+    as.data.frame()
+  
+  df_obs = df_sp %>%
+    filter(abondance != 0) %>%
+    group_by(!!sym(lst_param[[i]][[1]])) %>%
+    summarise(nobs = n()) %>%
+    as.data.frame()
+  
+    # mutate(nperc = nobs/df_tot$ntot)
+  
+  if (length(setdiff(df_tot[,lst_param[[i]][[1]]],
+                     df_obs[,lst_param[[i]][[1]]] )) != 0) {
+    df_add = data.frame(distance = setdiff(df_tot[,lst_param[[i]][[1]]],
+                                           df_obs[,lst_param[[i]][[1]]] ),
+                        nobs = 0)
+    names(df_add)[1] = lst_param[[i]][[1]]
+    df_obs = rbind(df_obs, df_add)
+  }
+  
+  df_obs = df_obs %>%
+      mutate(nperc = nobs/df_tot$ntot) %>%
+      as.data.frame()
+  
+  print(df_obs %>%
+    ggplot() +
+      geom_bar(aes(x = !!sym(lst_param[[i]][[1]]), y = nperc),
+               stat = 'identity', fill = lst_param[[i]][[2]]) +
+      scale_x_discrete(limits=cat) +
+      scale_fill_manual(values = lst_param[[i]][[2]], breaks = cat, drop = FALSE)+
+      scale_y_continuous(labels = scales::percent_format(accuracy = 0.1)) +
+      xlab(lst_param[[i]][[3]]) +
+      ylab(paste0("Observations où un individu est vu/\n",
+                  "observations totales dans la catégorie de lieu"))) +
+      theme_cowplot()
+  
+}
+```
+:::
+
+```{r}
+df_jardin_point = df_sp %>%
+  # filter(abondance != 0) %>%
+  group_by(jardin_id, latitude, longitude) %>%
+  summarise(sum_ab = sum(abondance)) %>%
+  filter(!is.na(latitude)) %>%
+  mutate(is_pres = if_else(sum_ab == 0, "Non vu", "Vu")) %>%
+  arrange(is_pres)
+
+ggplot(france) + 
+    geom_sf(fill = "#f4f4f4") +
+    geom_point(data = df_jardin_point, aes(x = longitude, y = latitude, color=is_pres)) +
+    theme_light() 
+
+```
+
+
+# Grégarité des espèces
+
+```{r}
+df_gregarite = data.frame(nb_idv = as.numeric(names(summary(as.factor((df_sp%>%filter(abondance != 0))$abondance)))),
+                          frequence = summary(as.factor((df_sp%>%filter(abondance != 0))$abondance)))
+
+df_gregarite %>%
+  mutate(class_idv = case_when(nb_idv < 2 ~ "1",
+                               nb_idv >= 2 & nb_idv < 5 ~ "2 à 4",
+                               nb_idv >= 5 & nb_idv < 10 ~ "5 à 9",
+                               nb_idv >= 10 ~ "10 et +")) %>%
+  ggplot() +
+    geom_bar(aes(x = class_idv, y = frequence),
+             stat = "identity",
+             fill = "#8cb6ec") +
+  scale_x_discrete(limits=c("1", "2 à 4", "5 à 9", "10 et +")) +
+  theme_cowplot() + 
+  labs(x = "Nombre d'individus observés simultanément",
+       y = "Nombre d'observations")
+    # scale_x_discrete(limits=df_gregarite$nb_idv[seq(from = 1, to = length(df_gregarite$nb_idv), by = 2)] )
+
+```
+
+# Cartes
+
+```{r}
+df_dep = df_sp %>% 
+  group_by(dept_code) %>%
+  summarise(n = sum(abondance))
+df_dep = df_dep %>%
+  mutate(cl_ab = case_when(n == 0 ~ "0",
+                           n > 0 & n <= 50 ~ "1-50",
+                           n > 50 & n <= 100 ~ "51-100",
+                           n > 100 & n <= 300 ~ "101-300",
+                           n > 300 & n <= 500 ~ "301-500",
+                           n > 500 ~ "+ de 500"))
+
+cat = c("0", "1-50", "51-100", "101-300", "301-500", "+ de 500")
+couleurs = c("#7f7f7f", "#ffef6c", "#f7b905", "#ff7400", "#ff0000", "#950000")
+
+df_dep = df_dep[c(1:6, 29:30, 7:28, 31:96),]
+
+ggplot(france) + 
+    geom_sf(aes(fill = df_dep$cl_ab), show.legend = "fill") +
+    scale_fill_manual(values = couleurs, breaks = cat, drop = FALSE)+
+    labs(fill = "Abondance entre 2018 et 2024") +
+    theme_light()
+```
+
+```{r}
+df_dep = df_sp %>% 
+  group_by(dept_code, annee) %>%
+  summarise(n = sum(abondance))
+df_dep = df_dep %>%
+  mutate(cl_ab = case_when(n == 0 ~ "0",
+                           n >= 1 & n <= 25 ~ "1-25",
+                           n > 25 & n <= 70 ~ "26-70",
+                           n > 70 & n <= 100 ~ "71-100",
+                           n > 100 ~ "+ de 100"))
+
+cat = c("0", "1-25", "26-70", "71-100", "+ de 100")
+couleurs = c("#7f7f7f", "#ffef6c", "#f7b905", "#ff7400", "#ff0000", "#950000")
+```
+
+
+::: {.panel-tabset}
+```{r}
+#| results: asis
+#| fig-width: 6
+#| fig-height: 4
+for(an in 2018:2024) {
+  cat(sprintf("\n\n## %d\n\n", an))
+  
+  df_dep_an = df_dep %>%
+    filter(annee == an) 
+  
+  codes = reg_dep$code_departement[which(!(reg_dep$code_departement %in% df_dep_an$dept_code))]
+  df_vide = data.frame(dept_code = codes, annee = an, n = 0, cl_ab = "0")
+  df_dep_an = df_dep_an %>% bind_rows(df_vide) %>%
+    filter(str_length(dept_code) == 2) %>%
+    arrange(dept_code)
+  df_dep_an = df_dep_an[c(1:6, 29:30, 7:28, 31:96),]
+
+  print(ggplot(france) + 
+    geom_sf(aes(fill = df_dep_an$cl_ab), show.legend = "fill") +
+    scale_fill_manual(values = couleurs, breaks = cat, drop = FALSE)+
+    labs(fill = paste0("Abondance en ", an)) +
+    theme_light())
+}
+```
+
+:::
+
+# Carte avec slider
+
+```{r}
+df_tot = data.frame()
+for (an in 2018:2024) {
+  df_dep_an = df_dep %>%
+    filter(annee == an) 
+  
+  codes = reg_dep$code_departement[which(!(reg_dep$code_departement %in% df_dep_an$dept_code))]
+  df_vide = data.frame(dept_code = codes, annee = an, n = 0, cl_ab = "0")
+  df_dep_an = df_dep_an %>% bind_rows(df_vide) %>% filter(str_length(dept_code) == 2)
+  
+  df_tot = rbind(df_tot, df_dep_an)
+}
+
+gogo_test = df_tot %>%
+  left_join(france, by = c("dept_code" = "code")) %>%
+  rename(code = dept_code) %>%
+  relocate(nom, .after = code) %>%
+  relocate(geometry, .after = last_col()) %>%
+  select(!c(n))
+
+gg = ggplot(st_as_sf(gogo_test %>% filter(annee != 2018))) + 
+    geom_sf(aes(fill = cl_ab, frame = annee), show.legend = "fill") +
+    labs(fill = paste0("Abondance en ")) +
+    theme_light()+
+    scale_fill_manual(values = couleurs, breaks = cat, drop = FALSE)
+
+ggplotly(gg)
+```
+
+
+
+--------------------
+
+# Test sur co-occurence
+
+```{r}
+df_co_id = df_sp%>%
+  filter(abondance != 0)
+
+#length(unique(df_co_id$participation_id))
+
+df_co = df_all_sp %>%
+  filter(participation_id %in% unique(df_co_id$participation_id))
+```
+
+```{r}
+df_occurence = df_all_sp %>%
+  select(participation_id, an_sem, annee, nom_espece, abondance) %>%
+  pivot_wider(names_from = nom_espece, values_from = abondance)%>%
+  filter(annee == 2023, !!sym(sp_name) != 0)%>%
+  mutate(participation_id = as.character(participation_id),
+         annee = as.character(annee)) %>%
+  mutate_if(~ any(is.numeric(.)), ~ if_else(.==0, "NON", "OUI")) %>%
+  select(!c(participation_id, an_sem, annee, !!sym(sp_name)))
+
+```
+
+
+```{r}
+prc_oui = function(x){
+  return(length(which(x=="OUI")) / length(x))
+}
+
+df_oui = apply(df_occurence, 2, prc_oui)
+df_oui = sort(round(df_oui*100, digits = 2), decreasing = TRUE)
+df_oui = data.frame(nom = names(df_oui), corr = as.numeric(df_oui))
+
+```
+
+```{r}
+fabric_tab = matrix(nrow = 18, ncol = 5)
+
+for (i in 1:9) {
+  fabric_tab[i*2-1, 1:5] = df_oui$nom[(1+(5*(i-1))):(5+(5*(i-1)))]
+  fabric_tab[i*2, 1:5] = df_oui$corr[(1+(5*(i-1))):(5+(5*(i-1)))]
+}
+
+```
+
+```{r}
+# kable(fabric_tab)
+```
+
+## Graphes 
+::: {.panel-tabset}
+### 1
+```{r}
+all_names = unique(df_all_sp$nom_espece)
+names_no_sp = all_names[-which(all_names == sp_name)]
+df_oui = df_oui %>%
+  dplyr::arrange(nom)
+
+test_hierarchy = data.frame(from = rep(sp_name, nrow(df_oui)),
+                            to = df_oui$nom,
+                            value = df_oui$corr) %>%
+  mutate(seuil = if_else(value > 30, "red", "grey"))
+test_vertices = data.frame(name = unique(c(as.character(test_hierarchy$from), as.character(test_hierarchy$to))) )
+
+mygraph <- graph_from_data_frame(test_hierarchy, vertices=test_vertices )
+# This is a network object, you visualize it as a network like shown in the network section!
+
+E(mygraph)$color = test_hierarchy$seuil
+E(mygraph)$weight = test_hierarchy$value/10
+V(mygraph)$label.cex = 0.5
+
+# With igraph: 
+# plot(mygraph, edge.arrow.size=0, vertex.size=2)
+
+```
+
+### 2
+```{r}
+plot(mygraph, edge.arrow.size=0, vertex.size=2, layout=layout.circle, main="circle", label.y = 90, vertex.label.dist=0.5)
+```
+
+### 3
+```{r}
+E(mygraph)$color = "grey"
+plot(mygraph, edge.arrow.size=0, vertex.size=2, layout=layout.sphere, label.y = 90, vertex.label.dist=0.5, edge.width=E(mygraph)$weight)
+```
+:::
+
+```{r}
+df_oui %>%
+  ggplot() +
+   geom_bar(aes(x = nom, y = corr), stat = "identity") +
+   geom_hline(yintercept = 30, color = "red") +
+   coord_flip() +
+   theme_cowplot() +
+   theme(axis.text.y = element_text(size = 7))
+```
+
