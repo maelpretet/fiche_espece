@@ -23,7 +23,7 @@ liste_principale <- c("Machaons","Flambés", "Demi-deuils",
                       "Argus verts", "Brun des pélargoniums", "Cuivré", "Hespérides tachetées",
                       "Hespérides orangées", "Moro-sphinx")
 # Départements avec numéro et région
-reg_dep = read.csv2("doc/departements-france.csv", sep=",")
+reg_dep = read.csv2("data/departements-france.csv", sep=",")
 ```
 
 ## `{r} sp_name`
@@ -83,6 +83,7 @@ df_repartition = df_all_sp %>%
 
 
 ```{r}
+# Calcul de nombres de base
 nb_obs_rea = nrow(df_sp %>% group_by(an_sem, user_id, jardin_id) %>% summarise(n = n()))
 nb_obs_idv = nrow(df_sp %>% filter(abondance != 0))
 nb_idv_cpt = sum(df_sp %>% filter(abondance != 0) %>% select(abondance))
@@ -107,8 +108,8 @@ df_sp %>%
     group_by(annee, num_semaine) %>%
     summarise(sum_ab = sum(abondance)) %>%
     arrange(num_semaine) %>%
-    e_charts(num_semaine) %>%
-    e_line(sum_ab) %>%
+    e_charts(num_semaine) %>%       # axe x pour echarts
+    e_line(sum_ab) %>%              # type de représentation pour l'axe y
     # e_bar(sum_ab) %>%
     e_legend(top = "3%") %>%
     e_tooltip(trigger = "axis") %>%
@@ -127,18 +128,20 @@ df_sp %>%
 
 
 ```{r}
-
+# Graphique avec slider en ggplot
 gg = df_sp %>%
     mutate(num_semaine = as.integer(num_semaine)) %>%
     group_by(annee, num_semaine) %>%
     summarise(sum_ab = sum(abondance)) %>%
     arrange(num_semaine) %>%
   ggplot() +
+    # geom_bar(aes(x=num_semaine, y = sum_ab, frame = annee), stat = 'identity') +
     geom_line(aes(x=num_semaine, y = sum_ab, frame = annee),
               color = 'purple') +
     theme_cowplot()
   
-ggplotly(gg)
+ggplotly(gg) %>%
+  animation_opts(transition = 0)
 ```
 
 
@@ -148,9 +151,15 @@ df_sp %>%
   group_by(date) %>%
   summarise(sum_ab = sum(abondance)) %>%
   ggplot() +
-   geom_line(aes(x = date, y = sum_ab))
+   # geom_line(aes(x = date, y = sum_ab), color="#8A173A") +
+   geom_bar(aes(x = date, y = sum_ab), color="#8A173A", stat="identity") +
+   theme_cowplot() +
+   scale_x_date(date_labels = "%Y-%b", date_breaks = "9 months") +
+   theme(axis.text.x = element_text(angle = 0, size = 8)) +
+   xlab("Date de collection") +
+   ylab("Abondance")
 ```
-
+ 
 
 
 ```{r}
@@ -441,6 +450,7 @@ prc_oui = function(x){
 
 df_oui = apply(df_test3, 2, prc_oui)
 df_oui = sort(round(df_oui*100, digits = 2), decreasing = TRUE)
+df_oui = data.frame(nom = names(df_oui), corr = as.numeric(df_oui))
 
 ```
 
@@ -448,8 +458,8 @@ df_oui = sort(round(df_oui*100, digits = 2), decreasing = TRUE)
 fabric_tab = matrix(nrow = 18, ncol = 5)
 
 for (i in 1:9) {
-  fabric_tab[i*2-1, 1:5] = names(df_oui)[(1+(5*(i-1))):(5+(5*(i-1)))]
-  fabric_tab[i*2, 1:5] = df_oui[(1+(5*(i-1))):(5+(5*(i-1)))]
+  fabric_tab[i*2-1, 1:5] = df_oui$nom[(1+(5*(i-1))):(5+(5*(i-1)))]
+  fabric_tab[i*2, 1:5] = df_oui$corr[(1+(5*(i-1))):(5+(5*(i-1)))]
 }
 
 ```
@@ -461,10 +471,12 @@ kable(fabric_tab)
 ```{r}
 all_names = unique(df_all_sp$nom_espece)
 names_no_sp = all_names[-which(all_names == sp_name)]
+df_oui = df_oui %>%
+  dplyr::arrange(nom)
 
-test_hierarchy = data.frame(from = rep(sp_name, length(df_oui)),
-                            to = names(df_oui),
-                            value = as.double(df_oui)) %>%
+test_hierarchy = data.frame(from = rep(sp_name, nrow(df_oui)),
+                            to = df_oui$nom,
+                            value = df_oui$corr) %>%
   mutate(seuil = if_else(value > 30, "red", "grey"))
 test_vertices = data.frame(name = unique(c(as.character(test_hierarchy$from), as.character(test_hierarchy$to))) )
 
@@ -487,6 +499,16 @@ plot(mygraph, edge.arrow.size=0, vertex.size=2, layout=layout.circle, main="circ
 ```{r}
 E(mygraph)$color = "grey"
 plot(mygraph, edge.arrow.size=0, vertex.size=2, layout=layout.sphere, label.y = 90, vertex.label.dist=0.5, edge.width=E(mygraph)$weight)
+```
+
+```{r}
+df_oui %>%
+  ggplot() +
+   geom_bar(aes(x = nom, y = corr), stat = "identity") +
+   geom_hline(yintercept = 30, color = "red") +
+   coord_flip() +
+   theme_cowplot() +
+   theme(axis.text.y = element_text(size = 7))
 ```
 
 
