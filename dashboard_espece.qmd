@@ -37,6 +37,7 @@ library(ggplot2)
 library(here)
 library(igraph)
 library(knitr)
+library(magick)
 library(plotly)
 library(RColorBrewer)
 library(rlang)
@@ -113,6 +114,15 @@ Nombre de jardins dans lesquels au moins un individu a été observé :
 
 `{r} nb_jardin`
 :::
+
+### Photo
+
+:::: {.column-page width="20%"}
+```{r}
+file_img = paste0("data/photos/", sp_name, ".jpg")
+image_read(file_img)
+```
+::::
 
 # Par années
 
@@ -382,37 +392,11 @@ df_gregarite %>%
 
 # Cartes
 
-## Column 1
-
 ```{r}
-df_dep = df_sp %>% 
-  group_by(dept_code) %>%
-  summarise(n = sum(abondance))
-df_dep = df_dep %>%
-  mutate(cl_ab = case_when(n == 0 ~ "0",
-                           n > 0 & n <= 50 ~ "1-50",
-                           n > 50 & n <= 100 ~ "51-100",
-                           n > 100 & n <= 300 ~ "101-300",
-                           n > 300 & n <= 500 ~ "301-500",
-                           n > 500 ~ "+ de 500"))
-
-cat = c("0", "1-50", "51-100", "101-300", "301-500", "+ de 500")
-couleurs = c("#7f7f7f", "#ffef6c", "#f7b905", "#ff7400", "#ff0000", "#950000")
-
-df_dep = df_dep[c(1:6, 29:30, 7:28, 31:96),]
-
-ggplot(france) + 
-    geom_sf(aes(fill = df_dep$cl_ab), show.legend = "fill") +
-    scale_fill_manual(values = couleurs, breaks = cat, drop = FALSE)+
-    labs(fill = "Abondance entre 2018 et 2024") +
-    theme_light()
-```
-
-```{r}
-df_dep = df_sp %>% 
+df_dep_y = df_sp %>% 
   group_by(dept_code, annee) %>%
   summarise(n = sum(abondance))
-df_dep = df_dep %>%
+df_dep_y = df_dep_y %>%
   mutate(cl_ab = case_when(n == 0 ~ "0",
                            n >= 1 & n <= 25 ~ "1-25",
                            n > 25 & n <= 70 ~ "26-70",
@@ -423,7 +407,7 @@ cat = c("0", "1-25", "26-70", "71-100", "+ de 100")
 couleurs = c("#7f7f7f", "#ffef6c", "#f7b905", "#ff7400", "#ff0000", "#950000")
 ```
 
-## Column 2
+## Column 1
 
 ::: {.panel-tabset}
 ```{r}
@@ -433,7 +417,7 @@ couleurs = c("#7f7f7f", "#ffef6c", "#f7b905", "#ff7400", "#ff0000", "#950000")
 for(an in 2018:2024) {
   cat(sprintf("\n\n### %d\n\n", an))
   
-  df_dep_an = df_dep %>%
+  df_dep_an = df_dep_y %>%
     filter(annee == an) 
   
   codes = reg_dep$code_departement[which(!(reg_dep$code_departement %in% df_dep_an$dept_code))]
@@ -452,6 +436,32 @@ for(an in 2018:2024) {
 ```
 
 :::
+
+## Column 2
+
+```{r}
+df_dep = df_sp %>% 
+  group_by(dept_code) %>%
+  summarise(n = sum(abondance))
+
+df_dep = df_dep %>%
+  mutate(cl_ab = case_when(n == 0 ~ "0",
+                           n > 0 & n <= 50 ~ "1-50",
+                           n > 50 & n <= 100 ~ "51-100",
+                           n > 100 & n <= 300 ~ "101-300",
+                           n > 300 & n <= 500 ~ "301-500",
+                           n > 500 ~ "+ de 500"))
+
+df_dep = df_dep[c(1:6, 29:30, 7:28, 31:96),]
+
+cat = c("0", "1-50", "51-100", "101-300", "301-500", "+ de 500")
+
+ggplot(france) + 
+    geom_sf(aes(fill = df_dep$cl_ab), show.legend = "fill") +
+    scale_fill_manual(values = couleurs, breaks = cat, drop = FALSE)+
+    labs(fill = "Abondance entre 2018 et 2024") +
+    theme_light()
+```
 
 # Carte avec slider
 
