@@ -1,14 +1,15 @@
 ---
-title: "Fiche espèce {{< meta params.sp_name >}} "
+params:
+  sp_name: "Amaryllis"
+title: "Fiche espèce"
 format:
   dashboard:
     scrolling: true
     nav-buttons:
       - icon: github
         href: https://github.com/maelpretet/fiche_espece
-params:
-  sp_name: "Apollons"
-execute: 
+    embed-resources: true
+execute:
   echo: false
   message : false
   warning : false
@@ -20,19 +21,12 @@ execute:
 sp_name = params$sp_name
 year_colors = c("#eb6ecf", "#8a6eeb", "#6e9deb", "#6eebb4", "#ebbc6e", "#eb816e", "#d01456")
 color_flag = "red"
-#liste principale des papillons de l'observatoire
-liste_principale <- c("Machaons","Flambés", "Demi-deuils",
-                      "Paon du jour", "Vulcain", "Belle-dame", "Petites tortues",
-                      "Robert-le-diable", "Tabac d'Espagne", "Silène", "Sylvains",
-                      "Souci", "Aurores", "Piérides blanches","Gazé","Citrons","Amaryllis",
-                      "Myrtil", "Procris", "Mégères", "Tircis", "Lycènes bleus",
-                      "Argus verts", "Brun des pélargoniums", "Cuivré", "Hespérides tachetées",
-                      "Hespérides orangées", "Moro-sphinx")
 # Départements avec numéro et région
 reg_dep = read.csv2("data/departements-france.csv", sep=",")
+# {{< meta params.sp_name >}}
 ```
 
-# Observations
+# Observations `{r} params$sp_name`
 
 ```{r}
 # Librairies
@@ -74,6 +68,7 @@ df_all_sp = import_from_mosaic(query = read_sql_query("SQL/export_a_plat_OPJ.sql
                             paste0(annee, "-S0", num_semaine),
                             paste0(annee, "-S", num_semaine)) ) %>%
     left_join(reg_dep, by = c("dept_code" = "code_departement")) # ajout des départements
+# df_all_sp = params$df_all_sp
 
 # Df d'une espèce en particulier
 df_sp = df_all_sp %>%
@@ -119,7 +114,7 @@ Nombre de jardins dans lesquels au moins un individu a été observé :
 `{r} nb_jardin`
 :::
 
-# Graphiques par années
+# Par années
 
 Faire un graphique de superposition des années en echarts4r
 
@@ -137,7 +132,7 @@ df_sp %>%
     e_datazoom(x_index = 0, type = "slider", bottom = "3%") %>%
     e_toolbox_feature(feature = "saveAsImage") %>%
     e_toolbox_feature(feature = "dataView", readOnly = TRUE) %>%
-    e_x_axis(name="Semaine de prélèvement",
+    e_x_axis(name="Semaine de collection",
              nameLocation = "middle", nameGap= 27) %>%
     e_grid(bottom = "17%") %>%
     e_color(color = year_colors) %>%
@@ -159,6 +154,8 @@ gg = df_sp %>%
     # geom_bar(aes(x=num_semaine, y = sum_ab, frame = annee), stat = 'identity') +
     geom_line(aes(x=num_semaine, y = sum_ab, frame = annee),
               color = 'purple') +
+    xlab("Semaine de collection") +
+    ylab("Abondance totale") +
     theme_cowplot()
   
 ggplotly(gg) %>%
@@ -181,7 +178,7 @@ df_sp %>%
    ylab("Abondance")
 ```
  
-# Répartition par rapport aux autres espèces
+# Répartition
 
 ```{r}
 df_repartition %>%
@@ -190,21 +187,24 @@ df_repartition %>%
              stat = "identity") +
     scale_x_discrete(limits=df_repartition$nom_espece) +
     scale_y_continuous(name = "Abondance") +
+    ylab("Abondance relative") +
     theme_cowplot() +
     theme(axis.text.x = element_blank(), axis.title.x = element_blank(),
           axis.ticks.x = element_blank(), axis.line.x = element_blank(),
           legend.position = "none" ) +
     scale_fill_manual(breaks = df_repartition$nom_espece,
                       values = df_repartition$couleur) +
-    annotate("text", label = sp_name, x = 8.8,
-             y = max(df_repartition$rel_ab)*0.8)+
+    annotate("text", label = sp_name, x = 6.8,
+             y = max(df_repartition$rel_ab)*0.8, hjust = 0)+
     annotate("rect", fill = color_flag, xmin = 4, xmax = 6,
              ymin = max(df_repartition$rel_ab)*0.78,
              ymax = max(df_repartition$rel_ab)*0.82) +
     scale_y_continuous(labels = scales::percent_format(accuracy = 1))
 ```
 
-# Histogrammes sur les distances des jardins
+# Jardins {orientation="columns"}
+
+## Column 1
 
 ```{r}
 df_jardin = df_sp %>%
@@ -220,17 +220,20 @@ cat <- c("0 m", "50 m", "500 m", "1000 m", "2000 m", "+ 2000 m")
 bois = list()
 bois[[1]] <- "distance_bois"
 bois[[2]] <- c("#7ce084", "#2bc259", "#025512", "#b19976", "#785016", "#331f00")
-bois[[3]] <- "Distance bois   "
+bois[[3]] <- "Distance bois"
+bois[[4]] <- "Bois"
 
 champ = list()
 champ[[1]] <- "distance_champs"
 champ[[2]] <- c("#9d5d07", "#f5a130", "#fec982", "#82cbfe", "#0078ff", "#0107bc")
-champ[[3]] <- "Distance champ  "
+champ[[3]] <- "Distance champ"
+champ[[4]] <- "Champ"
 
 prairie = list()
 prairie[[1]] <- "distance_prairie"
 prairie[[2]] <- c("#700080", "#bc18d4", "#e554fa", "#fabb54", "#f99a00", "#fe4100")
 prairie[[3]] <- "Distance prairie"
+prairie[[4]] <- "Prairie"
 
 lst_param = list(bois, champ, prairie)
 
@@ -243,7 +246,7 @@ lst_param = list(bois, champ, prairie)
 #| fig-width: 6
 #| fig-height: 4
 for(i in 1:3) {
-  cat(sprintf(paste0("\n\n## Histogramme ",lst_param[[i]][[3]],"\n\n")))
+  cat(sprintf(paste0("\n\n## ",lst_param[[i]][[4]],"\n\n")))
   
   df_complet = data.frame(distance = cat, mean_ab = 0, sd_ab = 0)
   names(df_complet)[1] = lst_param[[i]][[1]]
@@ -291,7 +294,7 @@ for(i in 1:3) {
 #| fig-width: 6
 #| fig-height: 4
 for(i in 1:3) {
-  cat(sprintf(paste0("\n\n## Histogramme ",lst_param[[i]][[3]],"\n\n")))
+  cat(sprintf(paste0("\n\n## ",lst_param[[i]][[4]],"\n\n")))
   
   df_tot = df_sp %>%
     group_by(!!sym(lst_param[[i]][[1]])) %>%
@@ -328,12 +331,14 @@ for(i in 1:3) {
       scale_y_continuous(labels = scales::percent_format(accuracy = 0.1)) +
       xlab(lst_param[[i]][[3]]) +
       ylab(paste0("Observations où un individu est vu/\n",
-                  "observations totales dans la catégorie de lieu"))) +
-      theme_cowplot()
+                  "observations totales dans la catégorie de lieu")) +
+      theme_cowplot())
   
 }
 ```
 :::
+
+## Column 2
 
 ```{r}
 df_jardin_point = df_sp %>%
@@ -352,7 +357,7 @@ ggplot(france) +
 ```
 
 
-# Grégarité des espèces
+# Grégarité
 
 ```{r}
 df_gregarite = data.frame(nb_idv = as.numeric(names(summary(as.factor((df_sp%>%filter(abondance != 0))$abondance)))),
@@ -376,6 +381,8 @@ df_gregarite %>%
 ```
 
 # Cartes
+
+## Column 1
 
 ```{r}
 df_dep = df_sp %>% 
@@ -416,6 +423,7 @@ cat = c("0", "1-25", "26-70", "71-100", "+ de 100")
 couleurs = c("#7f7f7f", "#ffef6c", "#f7b905", "#ff7400", "#ff0000", "#950000")
 ```
 
+## Column 2
 
 ::: {.panel-tabset}
 ```{r}
@@ -423,7 +431,7 @@ couleurs = c("#7f7f7f", "#ffef6c", "#f7b905", "#ff7400", "#ff0000", "#950000")
 #| fig-width: 6
 #| fig-height: 4
 for(an in 2018:2024) {
-  cat(sprintf("\n\n## %d\n\n", an))
+  cat(sprintf("\n\n### %d\n\n", an))
   
   df_dep_an = df_dep %>%
     filter(annee == an) 
@@ -480,7 +488,7 @@ ggplotly(gg)
 
 --------------------
 
-# Test sur co-occurence
+# Co-occurence
 
 ```{r}
 df_co_id = df_sp%>%
@@ -532,7 +540,7 @@ for (i in 1:9) {
 
 ## Graphes 
 ::: {.panel-tabset}
-### 1
+
 ```{r}
 all_names = unique(df_all_sp$nom_espece)
 names_no_sp = all_names[-which(all_names == sp_name)]
@@ -557,12 +565,12 @@ V(mygraph)$label.cex = 0.5
 
 ```
 
-### 2
+### 1
 ```{r}
-plot(mygraph, edge.arrow.size=0, vertex.size=2, layout=layout.circle, main="circle", label.y = 90, vertex.label.dist=0.5)
+plot(mygraph, edge.arrow.size=0, vertex.size=2, layout=layout.circle, label.y = 90, vertex.label.dist=0.5)
 ```
 
-### 3
+### 2
 ```{r}
 E(mygraph)$color = "grey"
 plot(mygraph, edge.arrow.size=0, vertex.size=2, layout=layout.sphere, label.y = 90, vertex.label.dist=0.5, edge.width=E(mygraph)$weight)
@@ -576,6 +584,8 @@ df_oui %>%
    geom_hline(yintercept = 30, color = "red") +
    coord_flip() +
    theme_cowplot() +
-   theme(axis.text.y = element_text(size = 7))
+   theme(axis.text.y = element_text(size = 7)) +
+   xlab("% de co-occurence") +
+   ylab("Nom de l'espèce")
 ```
 
