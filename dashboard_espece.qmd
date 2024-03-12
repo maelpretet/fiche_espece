@@ -4,10 +4,12 @@ params:
 title: "Fiche espèce"
 format:
   dashboard:
-    scrolling: true
+    scrolling: false
     nav-buttons:
       - icon: github
         href: https://github.com/maelpretet/fiche_espece
+      - icon: arrow-bar-left
+        href: ../programs/accueil.html
     embed-resources: true
 execute:
   echo: false
@@ -21,6 +23,14 @@ execute:
 sp_name = params$sp_name
 year_colors = c("#eb6ecf", "#8a6eeb", "#6e9deb", "#6eebb4", "#ebbc6e", "#eb816e", "#d01456")
 color_flag = "red"
+#liste principale des papillons de l'observatoire
+liste_principale <- c("Machaons","Flambés", "Demi-deuils",
+                      "Paon du jour", "Vulcain", "Belle-dame", "Petites tortues",
+                      "Robert-le-diable", "Tabac d'Espagne", "Silène", "Sylvains",
+                      "Souci", "Aurores", "Piérides blanches","Gazé","Citrons","Amaryllis",
+                      "Myrtil", "Procris", "Mégères", "Tircis", "Lycènes bleus",
+                      "Argus verts", "Brun des pélargoniums", "Cuivré", "Hespérides tachetées",
+                      "Hespérides orangées", "Moro-sphinx")
 # Départements avec numéro et région
 reg_dep = read.csv2("data/departements-france.csv", sep=",")
 # {{< meta params.sp_name >}}
@@ -64,24 +74,23 @@ df_all_sp = import_from_mosaic(query = read_sql_query("SQL/export_a_plat_OPJ.sql
                                     database_name = "spgp") %>%
     filter(!is.na(dept_code),         # suppression des départements nuls
            str_length(dept_code)==2,  # suppression des drom-com
-           annee >= 2018) %>%         # suppression des données avant 2018
+           annee >= 2019,
+           nom_espece %in% liste_principale) %>%         # suppression des données avant 2019
     mutate(an_sem = if_else(as.numeric(num_semaine) < 10,
                             paste0(annee, "-S0", num_semaine),
-                            paste0(annee, "-S", num_semaine)) ) %>%
+                            paste0(annee, "-S", num_semaine))  ) %>%
     left_join(reg_dep, by = c("dept_code" = "code_departement")) # ajout des départements
 # df_all_sp = params$df_all_sp
+
+a = df_all_sp %>%
+  group_by(jardin_id, participation_id) %>%
+  summarise(n = n())
+
+
 
 # Df d'une espèce en particulier
 df_sp = df_all_sp %>%
   filter(nom_espece == sp_name)
-
-# Df abondance par espèce
-df_repartition = df_all_sp %>% 
-  group_by(nom_espece) %>% 
-  summarise(sum_ab = sum(abondance),
-            rel_ab = sum(abondance)/sum(df_all_sp$abondance)) %>%
-  arrange(sum_ab) %>%
-  mutate(couleur = if_else(nom_espece == sp_name, color_flag, "grey"))
 ```
 
 
@@ -93,9 +102,9 @@ nb_idv_cpt = sum(df_sp %>% filter(abondance != 0) %>% select(abondance))
 nb_jardin = length(unique((df_sp %>% filter(abondance != 0))$jardin_id))
 ```
 
-Données cumulées depuis 2018
+Données cumulées depuis 2019
 
-### Observations
+## Observations
 
 ::: {.valuebox icon="eye" color="#ced600"}
 Nombre de fois où au moins un individu a été observé :
@@ -115,27 +124,45 @@ Nombre de jardins dans lesquels au moins un individu a été observé :
 `{r} nb_jardin`
 :::
 
-### Photo
-
-:::: {.column-page width="20%"}
+## Photo
 ```{r}
 file_img = paste0("data/photos/", sp_name, ".jpg")
 image_read(file_img)
 ```
-::::
+
 
 # Par années
 
-Faire un graphique de superposition des années en echarts4r
+## Row
+
+### Column
 
 ```{r}
+df_sp %>%
+  mutate(date = as.Date(date_collection)) %>%
+  group_by(date) %>%
+  summarise(sum_ab = sum(abondance)) %>%
+  ggplot() +
+   # geom_line(aes(x = date, y = sum_ab), color="#8A173A") +
+   geom_bar(aes(x = date, y = sum_ab), color="#8A173A", stat="identity") +
+   theme_cowplot() +
+   scale_x_date(date_labels = "%Y-%b", date_breaks = "9 months") +
+   theme(axis.text.x = element_text(angle = 0, size = 8)) +
+   xlab("Date de collection") +
+   ylab("Abondance")
+```
+
+### Column {.tabset}
+
+```{r fig.width=10, fig.height=6}
+#| title: Superposition
 df_sp %>%
     mutate(num_semaine = as.integer(num_semaine)) %>%
     group_by(annee, num_semaine) %>%
     summarise(sum_ab = sum(abondance)) %>%
     arrange(num_semaine) %>%
     e_charts(num_semaine) %>%       # axe x pour echarts
-    e_line(sum_ab) %>%              # type de représentation pour l'axe y
+    e_line(sum_ab, symbol='none') %>%              # type de représentation pour l'axe y
     # e_bar(sum_ab) %>%
     e_legend(top = "3%") %>%
     e_tooltip(trigger = "axis") %>%
@@ -153,7 +180,9 @@ df_sp %>%
 ```
 
 
+
 ```{r}
+#| title: Slider
 # Graphique avec slider en ggplot
 gg = df_sp %>%
     mutate(num_semaine = as.integer(num_semaine)) %>%
@@ -162,7 +191,9 @@ gg = df_sp %>%
     arrange(num_semaine) %>%
   ggplot() +
     # geom_bar(aes(x=num_semaine, y = sum_ab, frame = annee), stat = 'identity') +
-    geom_line(aes(x=num_semaine, y = sum_ab, frame = annee),
+    # geom_point(aes(x=num_semaine, y = sum_ab, frame = annee),
+    #           color = 'purple') +
+    geom_smooth(aes(x=num_semaine, y = sum_ab, frame = annee),
               color = 'purple') +
     xlab("Semaine de collection") +
     ylab("Abondance totale") +
@@ -173,43 +204,56 @@ ggplotly(gg) %>%
 ```
 
 
-```{r}
-df_sp %>%
-  mutate(date = as.Date(date_collection)) %>%
-  group_by(date) %>%
-  summarise(sum_ab = sum(abondance)) %>%
-  ggplot() +
-   # geom_line(aes(x = date, y = sum_ab), color="#8A173A") +
-   geom_bar(aes(x = date, y = sum_ab), color="#8A173A", stat="identity") +
-   theme_cowplot() +
-   scale_x_date(date_labels = "%Y-%b", date_breaks = "9 months") +
-   theme(axis.text.x = element_text(angle = 0, size = 8)) +
-   xlab("Date de collection") +
-   ylab("Abondance")
-```
- 
 # Répartition
 
 ```{r}
-df_repartition %>%
+# Df abondance par espèce
+df_repartition = df_all_sp %>% 
+  group_by(nom_espece) %>% 
+  summarise(sum_ab = sum(abondance),
+            rel_ab = sum(abondance)/sum(df_all_sp$abondance)) %>%
+  arrange(sum_ab) %>%
+  mutate(couleur = if_else(nom_espece == sp_name, color_flag, "grey"))
+
+gg = df_repartition %>%
   ggplot() +
-    geom_bar(mapping = aes(x = nom_espece, y = rel_ab, fill = nom_espece),
+    geom_bar(mapping = aes(x = nom_espece, y = rel_ab, fill = nom_espece,
+                           text = nom_espece),
              stat = "identity") +
     scale_x_discrete(limits=df_repartition$nom_espece) +
-    scale_y_continuous(name = "Abondance") +
-    ylab("Abondance relative") +
+    ylab("% d'abondance") +
     theme_cowplot() +
     theme(axis.text.x = element_blank(), axis.title.x = element_blank(),
           axis.ticks.x = element_blank(), axis.line.x = element_blank(),
           legend.position = "none" ) +
     scale_fill_manual(breaks = df_repartition$nom_espece,
                       values = df_repartition$couleur) +
-    annotate("text", label = sp_name, x = 6.8,
-             y = max(df_repartition$rel_ab)*0.8, hjust = 0)+
-    annotate("rect", fill = color_flag, xmin = 4, xmax = 6,
-             ymin = max(df_repartition$rel_ab)*0.78,
-             ymax = max(df_repartition$rel_ab)*0.82) +
     scale_y_continuous(labels = scales::percent_format(accuracy = 1))
+
+ggplotly(gg, tooltip = "text")
+```
+
+# Grégarité
+
+```{r}
+df_gregarite = data.frame(nb_idv = as.numeric(names(summary(as.factor((df_sp%>%filter(abondance != 0))$abondance)))),
+                          frequence = summary(as.factor((df_sp%>%filter(abondance != 0))$abondance)))
+
+df_gregarite %>%
+  mutate(class_idv = case_when(nb_idv < 2 ~ "1",
+                               nb_idv >= 2 & nb_idv < 5 ~ "2 à 4",
+                               nb_idv >= 5 & nb_idv < 10 ~ "5 à 9",
+                               nb_idv >= 10 ~ "10 et +")) %>%
+  ggplot() +
+    geom_bar(aes(x = class_idv, y = frequence),
+             stat = "identity",
+             fill = "#8cb6ec") +
+  scale_x_discrete(limits=c("1", "2 à 4", "5 à 9", "10 et +")) +
+  theme_cowplot() + 
+  labs(x = "Nombre d'individus observés simultanément",
+       y = "Nombre d'observations")
+    # scale_x_discrete(limits=df_gregarite$nb_idv[seq(from = 1, to = length(df_gregarite$nb_idv), by = 2)] )
+
 ```
 
 # Jardins {orientation="columns"}
@@ -249,6 +293,7 @@ lst_param = list(bois, champ, prairie)
 
 ```
 
+### Row 1
 
 ::: {.panel-tabset}
 ```{r}
@@ -256,7 +301,7 @@ lst_param = list(bois, champ, prairie)
 #| fig-width: 6
 #| fig-height: 4
 for(i in 1:3) {
-  cat(sprintf(paste0("\n\n## ",lst_param[[i]][[4]],"\n\n")))
+  cat(sprintf(paste0("\n\n#### ",lst_param[[i]][[4]],"\n\n")))
   
   df_complet = data.frame(distance = cat, mean_ab = 0, sd_ab = 0)
   names(df_complet)[1] = lst_param[[i]][[1]]
@@ -268,10 +313,6 @@ for(i in 1:3) {
                list(mean, sd) ) %>%
     rename(mean_ab = fn1, sd_ab = fn2) %>%
     as.data.frame()
-  
-  # if (length(which(!(cat %in% df_histo[,1]))) ) {
-  #   
-  # }
   
   if (length(setdiff(cat, df_histo[, lst_param[[i]][[1]]] )) != 0) {
     df_add = data.frame(distance = setdiff(cat, df_histo[, lst_param[[i]][[1]]] ),
@@ -290,13 +331,14 @@ for(i in 1:3) {
       scale_x_discrete(limits=cat) +
       scale_fill_manual(values = lst_param[[i]][[2]], breaks = cat, drop = FALSE)+
       xlab(lst_param[[i]][[3]]) +
-      ylab("Nombre moyen d'observations") +
+      ylab("Abondance moyenne (sur les jardins avec espèce observée)") +
       theme_cowplot())
   
 }
 ```
 :::
 
+### Row 2
 
 ::: {.panel-tabset}
 ```{r}
@@ -304,7 +346,7 @@ for(i in 1:3) {
 #| fig-width: 6
 #| fig-height: 4
 for(i in 1:3) {
-  cat(sprintf(paste0("\n\n## ",lst_param[[i]][[4]],"\n\n")))
+  cat(sprintf(paste0("\n\n#### ",lst_param[[i]][[4]],"\n\n")))
   
   df_tot = df_sp %>%
     group_by(!!sym(lst_param[[i]][[1]])) %>%
@@ -316,8 +358,6 @@ for(i in 1:3) {
     group_by(!!sym(lst_param[[i]][[1]])) %>%
     summarise(nobs = n()) %>%
     as.data.frame()
-  
-    # mutate(nperc = nobs/df_tot$ntot)
   
   if (length(setdiff(df_tot[,lst_param[[i]][[1]]],
                      df_obs[,lst_param[[i]][[1]]] )) != 0) {
@@ -366,31 +406,7 @@ ggplot(france) +
 
 ```
 
-
-# Grégarité
-
-```{r}
-df_gregarite = data.frame(nb_idv = as.numeric(names(summary(as.factor((df_sp%>%filter(abondance != 0))$abondance)))),
-                          frequence = summary(as.factor((df_sp%>%filter(abondance != 0))$abondance)))
-
-df_gregarite %>%
-  mutate(class_idv = case_when(nb_idv < 2 ~ "1",
-                               nb_idv >= 2 & nb_idv < 5 ~ "2 à 4",
-                               nb_idv >= 5 & nb_idv < 10 ~ "5 à 9",
-                               nb_idv >= 10 ~ "10 et +")) %>%
-  ggplot() +
-    geom_bar(aes(x = class_idv, y = frequence),
-             stat = "identity",
-             fill = "#8cb6ec") +
-  scale_x_discrete(limits=c("1", "2 à 4", "5 à 9", "10 et +")) +
-  theme_cowplot() + 
-  labs(x = "Nombre d'individus observés simultanément",
-       y = "Nombre d'observations")
-    # scale_x_discrete(limits=df_gregarite$nb_idv[seq(from = 1, to = length(df_gregarite$nb_idv), by = 2)] )
-
-```
-
-# Cartes
+# Cartes {orientation="columns"}
 
 ```{r}
 df_dep_y = df_sp %>% 
@@ -407,15 +423,15 @@ cat = c("0", "1-25", "26-70", "71-100", "+ de 100")
 couleurs = c("#7f7f7f", "#ffef6c", "#f7b905", "#ff7400", "#ff0000", "#950000")
 ```
 
-## Column 1
+## Column 1 {height=100%}
 
 ::: {.panel-tabset}
 ```{r}
 #| results: asis
 #| fig-width: 6
 #| fig-height: 4
-for(an in 2018:2024) {
-  cat(sprintf("\n\n### %d\n\n", an))
+for(an in 2019:2024) {
+  cat(sprintf("\n\n## %d\n\n", an))
   
   df_dep_an = df_dep_y %>%
     filter(annee == an) 
@@ -434,10 +450,9 @@ for(an in 2018:2024) {
     theme_light())
 }
 ```
-
 :::
 
-## Column 2
+## Column 2 {height=50%}
 
 ```{r}
 df_dep = df_sp %>% 
@@ -459,16 +474,45 @@ cat = c("0", "1-50", "51-100", "101-300", "301-500", "+ de 500")
 ggplot(france) + 
     geom_sf(aes(fill = df_dep$cl_ab), show.legend = "fill") +
     scale_fill_manual(values = couleurs, breaks = cat, drop = FALSE)+
-    labs(fill = "Abondance entre 2018 et 2024") +
+    labs(fill = "Abondance entre 2019 et 2024") +
     theme_light()
 ```
+
+
+# Migration
+
+```{r}
+df_migration = df_sp %>%
+  filter(annee == 2023) %>%
+  mutate(mois = strftime(date_collection, "%m")) %>%
+  group_by(mois, jardin_id, latitude, longitude) %>%
+  summarise(sum_ab = sum(abondance)) %>%
+  filter(sum_ab != 0)
+```
+
+```{r}
+gg = df_migration %>%
+  ggplot() +
+  geom_point(aes(x = longitude, y = latitude, frame = mois))
+
+# df_migration <- st_as_sf(df_migration, coords = c("longitude", "latitude"),
+#                          crs = "WGS84", remove = FALSE)
+
+# ggplot(france) +
+#   geom_sf() +
+#   geom_sf(data = df_migration) 
+
+ggplotly(gg) %>%
+  animation_opts(transition = 0)
+```
+
 
 # Carte avec slider
 
 ```{r}
 df_tot = data.frame()
-for (an in 2018:2024) {
-  df_dep_an = df_dep %>%
+for (an in 2019:2024) {
+  df_dep_an = df_dep_y %>%
     filter(annee == an) 
   
   codes = reg_dep$code_departement[which(!(reg_dep$code_departement %in% df_dep_an$dept_code))]
@@ -485,7 +529,7 @@ gogo_test = df_tot %>%
   relocate(geometry, .after = last_col()) %>%
   select(!c(n))
 
-gg = ggplot(st_as_sf(gogo_test %>% filter(annee != 2018))) + 
+gg = ggplot(st_as_sf(gogo_test)) + 
     geom_sf(aes(fill = cl_ab, frame = annee), show.legend = "fill") +
     labs(fill = paste0("Abondance en ")) +
     theme_light()+
@@ -493,7 +537,6 @@ gg = ggplot(st_as_sf(gogo_test %>% filter(annee != 2018))) +
 
 ggplotly(gg)
 ```
-
 
 
 --------------------
@@ -592,10 +635,11 @@ df_oui %>%
   ggplot() +
    geom_bar(aes(x = nom, y = corr), stat = "identity") +
    geom_hline(yintercept = 30, color = "red") +
+   scale_x_discrete(limits=rev) +
    coord_flip() +
    theme_cowplot() +
    theme(axis.text.y = element_text(size = 7)) +
-   xlab("% de co-occurence") +
-   ylab("Nom de l'espèce")
+   ylab("% de co-occurence") +
+   xlab("Nom de l'espèce")
 ```
 
