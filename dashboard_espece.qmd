@@ -23,6 +23,7 @@ execute:
 sp_name = params$sp_name
 year_colors = c("#eb6ecf", "#8a6eeb", "#6e9deb", "#6eebb4", "#ebbc6e",
                 "#eb816e", "#d01456", "#783628", "#0b15de", "#4fdce0")
+sp_colors = c("#f00000", "#4bdadc", "#31c1f3", "#14779a", "#003ca4", "#0c1eff")
 color_flag = "red"
 #liste principale des papillons de l'observatoire
 liste_principale <- c("Machaons","Flambés", "Demi-deuils",
@@ -37,7 +38,7 @@ reg_dep = read.csv2("data/departements-france.csv", sep=",")
 # {{< meta params.sp_name >}}
 ```
 
-# Observations `{r} params$sp_name`
+# `{r} params$sp_name`
 
 ```{r}
 # Librairies
@@ -98,11 +99,26 @@ nb_obs_rea = nrow(df_sp %>% group_by(an_sem, user_id, jardin_id) %>% summarise(n
 nb_obs_idv = nrow(df_sp %>% filter(abondance != 0))
 nb_idv_cpt = sum(df_sp %>% filter(abondance != 0) %>% select(abondance))
 nb_jardin = length(unique((df_sp %>% filter(abondance != 0))$jardin_id))
+nb_max_ab = df_sp %>%
+  group_by(annee, nom_departement, nom_region) %>%
+  summarise(sum_ab = sum(abondance)) %>%
+  ungroup() %>%
+  filter(sum_ab == max(sum_ab)) %>%
+  as.data.frame()
 ```
 
 Données cumulées depuis 2019
 
-## Observations
+## Photo
+```{r}
+file_img = paste0("data/photos/", sp_name, ".jpg")
+image_read(file_img)
+```
+
+
+# Par années
+
+## Row 1
 
 ::: {.valuebox icon="eye" color="#ced600"}
 Nombre de fois où au moins un individu a été observé :
@@ -116,38 +132,73 @@ Nombre total d'individus observés :
 `{r} nb_idv_cpt`
 :::
 
-::: {.valuebox icon="flower3" color="#fc5050"}
-Nombre de jardins dans lesquels au moins un individu a été observé :
+## Row 2
 
-`{r} nb_jardin`
-:::
-
-## Photo
-```{r}
-file_img = paste0("data/photos/", sp_name, ".jpg")
-image_read(file_img)
-```
-
-
-# Par années
-
-## Row
-
-### Column
+### Column {.tabset}
 
 ```{r}
+#| title: Semaine
+
+df_nb_obs <- df_sp %>%
+  mutate(date = as.Date(date_collection)) %>%
+  group_by(date) %>%
+  summarise(n = n()) %>%
+  arrange(date)
+
+div_obs = max((df_sp %>% group_by(an_sem) %>% summarise(n = sum(abondance)))$n) /
+  max(df_nb_obs$n)
+
 df_sp %>%
   mutate(date = as.Date(date_collection)) %>%
   group_by(date) %>%
   summarise(sum_ab = sum(abondance)) %>%
   ggplot() +
    # geom_line(aes(x = date, y = sum_ab), color="#8A173A") +
-   geom_bar(aes(x = date, y = sum_ab), color="#8A173A", stat="identity") +
+   geom_bar(aes(x = date, y = sum_ab), color = "#8A173A", fill="#ab0739", stat="identity") +
+   geom_line(data = df_nb_obs, aes(x = date, y = n*div_obs, group = 1), color = "#ff795c") +
    theme_cowplot() +
    scale_x_date(date_labels = "%Y-%b", date_breaks = "9 months") +
-   theme(axis.text.x = element_text(angle = 0, size = 8)) +
+   theme(axis.text.x = element_text(angle = 0, size = 8),
+         axis.title.y.left =  element_text(size = 12, color = "#ab0739"),
+         axis.title.y.right = element_text(size = 12, color = "#ff795c")) +
    xlab("Date de collection") +
-   ylab("Abondance")
+   ylab("Abondance") +
+   scale_y_continuous(sec.axis = sec_axis(~./div_obs, name = "Nombre d'observations"))
+```
+
+```{r}
+#| title: Mois
+
+df_nb_obs <- df_sp %>%
+  mutate(date_mois = strftime(as.Date(date_collection), "%G-%m")) %>%
+  group_by(date_mois) %>%
+  summarise(n = n()) %>%
+  mutate(date_mois = as.Date(paste0(date_mois, "-01")))
+
+div_obs = max((df_sp %>%
+                 mutate(date_mois = strftime(as.Date(date_collection),
+                                             "%G-%m")) %>%
+                 group_by(date_mois) %>%
+                 summarise(n = sum(abondance)))$n) /
+  max(df_nb_obs$n)
+
+df_sp %>%
+  mutate(date_mois = strftime(as.Date(date_collection), "%G-%m")) %>%
+  group_by(date_mois) %>%
+  summarise(sum_ab = sum(abondance)) %>%
+  mutate(date_mois = as.Date(paste0(date_mois, "-01"))) %>%
+  ggplot() +
+   # geom_line(aes(x = date, y = sum_ab), color="#8A173A") +
+   geom_bar(aes(x = date_mois, y = sum_ab), color = "#8A173A", fill="#ab0739", stat="identity") +
+   geom_line(data = df_nb_obs, aes(x = date_mois, y = n*div_obs, group = 1), color = "#ff795c") +
+   theme_cowplot() +
+   scale_x_date(date_labels = "%Y-%b", date_breaks = "9 months") +
+   theme(axis.text.x = element_text(angle = 0, size = 8),
+         axis.title.y.left =  element_text(size = 12, color = "#ab0739"),
+         axis.title.y.right = element_text(size = 12, color = "#ff795c")) +
+   xlab("Date de collection") +
+   ylab("Abondance") +
+   scale_y_continuous(sec.axis = sec_axis(~./div_obs, name = "Nombre d'observations"))
 ```
 
 ### Column {.tabset}
@@ -195,9 +246,6 @@ gg = df_sp %>%
     summarise(sum_ab = sum(abondance)) %>%
     arrange(num_semaine) %>%
   ggplot() +
-    # geom_bar(aes(x=num_semaine, y = sum_ab, frame = annee), stat = 'identity') +
-    # geom_point(aes(x=num_semaine, y = sum_ab, frame = annee),
-    #           color = 'purple') +
     geom_smooth(aes(x=num_semaine, y = sum_ab, frame = annee),
               color = 'purple') +
     xlab("Semaine de collection") +
@@ -207,7 +255,6 @@ gg = df_sp %>%
 ggplotly(gg) %>%
   animation_opts(transition = 0)
 ```
-
 
 # Répartition
 
@@ -259,7 +306,6 @@ df_gregarite %>%
   labs(x = "Nombre d'individus observés simultanément",
        y = "% d'observations") +
   scale_y_continuous(labels = scales::percent_format(accuracy = 1))
-    # scale_x_discrete(limits=df_gregarite$nb_idv[seq(from = 1, to = length(df_gregarite$nb_idv), by = 2)] )
 
 ```
 
@@ -338,7 +384,7 @@ for(i in 1:3) {
       scale_x_discrete(limits=cat) +
       scale_fill_manual(values = lst_param[[i]][[2]], breaks = cat, drop = FALSE)+
       xlab(lst_param[[i]][[3]]) +
-      ylab("Abondance moyenne (sur les jardins avec espèce observée)") +
+      ylab("Abondance moyenne\n(sur les jardins avec espèce observée)") +
       theme_cowplot())
   
 }
@@ -387,8 +433,8 @@ for(i in 1:3) {
       scale_fill_manual(values = lst_param[[i]][[2]], breaks = cat, drop = FALSE)+
       scale_y_continuous(labels = scales::percent_format(accuracy = 0.1)) +
       xlab(lst_param[[i]][[3]]) +
-      ylab(paste0("Observations où un individu est vu/\n",
-                  "observations totales dans la catégorie de lieu")) +
+      ylab(paste0("% d'observations de l'individu/\n",
+                  "dans la catégorie de lieu")) +
       theme_cowplot())
   
 }
@@ -397,9 +443,10 @@ for(i in 1:3) {
 
 ## Column 2
 
+### Row 1
+
 ```{r}
 df_jardin_point = df_sp %>%
-  # filter(abondance != 0) %>%
   group_by(jardin_id, latitude, longitude) %>%
   summarise(sum_ab = sum(abondance)) %>%
   filter(!is.na(latitude)) %>%
@@ -412,6 +459,14 @@ ggplot(france) +
     theme_light() 
 
 ```
+
+### Row 2
+
+::: {.valuebox icon="flower3" color="#00BBC1"}
+Nombre de jardins dans lesquels au moins un individu a été observé :
+
+`{r} nb_jardin`
+:::
 
 # Cartes {orientation="columns"}
 
@@ -432,6 +487,8 @@ couleurs = c("#7f7f7f", "#ffef6c", "#f7b905", "#ff7400", "#ff0000", "#950000")
 
 ## Column 1 {height=100%}
 
+### Row 1
+
 ::: {.panel-tabset}
 ```{r}
 #| results: asis
@@ -450,13 +507,21 @@ for(an in 2019:2024) {
     arrange(dept_code)
   df_dep_an = df_dep_an[c(1:6, 29:30, 7:28, 31:96),]
 
-  print(ggplot(france) + 
-    geom_sf(aes(fill = df_dep_an$cl_ab), show.legend = "fill") +
-    scale_fill_manual(values = couleurs, breaks = cat, drop = FALSE)+
-    labs(fill = paste0("Abondance en ", an)) +
-    theme_light())
+  print(carte_ab(shape_map = france, fill_map = df_dep_an$cl_ab,
+                 fill_color = couleurs, fill_cat = cat,
+                 fill_title = paste0("Abondance en ", an)))
+
 }
 ```
+:::
+
+### Row 2
+
+::: {.valuebox icon="bug" color="#fc5050"}
+Abondance maximale :
+
+`{r} nb_max_ab$sum_ab`
+individus en `{r} nb_max_ab$annee` en `{r} nb_max_ab$nom_departement` (`{r} nb_max_ab$nom_region`)
 :::
 
 ## Column 2 {height=50%}
@@ -478,68 +543,41 @@ df_dep = df_dep[c(1:6, 29:30, 7:28, 31:96),]
 
 cat = c("0", "1-50", "51-100", "101-300", "301-500", "+ de 500")
 
-ggplot(france) + 
-    geom_sf(aes(fill = df_dep$cl_ab), show.legend = "fill") +
-    scale_fill_manual(values = couleurs, breaks = cat, drop = FALSE)+
-    labs(fill = "Abondance entre 2019 et 2024") +
-    theme_light()
+carte_ab(shape_map = france, fill_map = df_dep$cl_ab, fill_color = couleurs,
+         fill_cat = cat, fill_title = "Abondance entre 2019 et 2024")
 ```
 
 
 # Migration
 
 ```{r}
+df_mois = data.frame(mois = c("01", "02", "03", "04", "05", "06",
+                              "07", "08", "09", "10", "11", "12"),
+                     jardin_id = 0,
+                     latitude = NA,
+                     longitude = NA,
+                     sum_ab = 0)
 df_migration = df_sp %>%
   filter(annee == 2023) %>%
   mutate(mois = strftime(date_collection, "%m")) %>%
   group_by(mois, jardin_id, latitude, longitude) %>%
   summarise(sum_ab = sum(abondance)) %>%
-  filter(sum_ab != 0)
+  filter(sum_ab != 0) %>%
+  dplyr::union(df_mois)
 ```
+
 
 ```{r}
-gg = df_migration %>%
-  ggplot() +
-  geom_point(aes(x = longitude, y = latitude, frame = mois))
+gg =ggplot(france) +
+  geom_sf(fill = "#f0f0f0", color = "#a0a0a0") +
+  geom_point(data = df_migration, aes(x = longitude, y=latitude, frame = mois), color = "red") +
+  theme_minimal()
 
-ggplotly(gg) %>%
-  animation_opts(transition = 0)
+gg %>%
+  ggplotly()  %>%
+  animation_opts(transition = 0, frame = 1000)
 ```
 
-
-# Carte avec slider
-
-```{r}
-df_tot = data.frame()
-for (an in 2019:2024) {
-  df_dep_an = df_dep_y %>%
-    filter(annee == an) 
-  
-  codes = reg_dep$code_departement[which(!(reg_dep$code_departement %in% df_dep_an$dept_code))]
-  df_vide = data.frame(dept_code = codes, annee = an, n = 0, cl_ab = "0")
-  df_dep_an = df_dep_an %>% bind_rows(df_vide) %>% filter(str_length(dept_code) == 2)
-  
-  df_tot = rbind(df_tot, df_dep_an)
-}
-
-gogo_test = df_tot %>%
-  left_join(france, by = c("dept_code" = "code")) %>%
-  rename(code = dept_code) %>%
-  relocate(nom, .after = code) %>%
-  relocate(geometry, .after = last_col()) %>%
-  select(!c(n))
-
-gg = ggplot(st_as_sf(gogo_test)) + 
-    geom_sf(aes(fill = cl_ab, frame = annee), show.legend = "fill") +
-    labs(fill = paste0("Abondance en ")) +
-    theme_light()+
-    scale_fill_manual(values = couleurs, breaks = cat, drop = FALSE)
-
-ggplotly(gg)
-```
-
-
---------------------
 
 # Co-occurence
 
@@ -577,20 +615,6 @@ df_oui = data.frame(nom = names(df_oui), corr = as.numeric(df_oui))
 
 ```
 
-```{r}
-fabric_tab = matrix(nrow = 18, ncol = 5)
-
-for (i in 1:9) {
-  fabric_tab[i*2-1, 1:5] = df_oui$nom[(1+(5*(i-1))):(5+(5*(i-1)))]
-  fabric_tab[i*2, 1:5] = df_oui$corr[(1+(5*(i-1))):(5+(5*(i-1)))]
-}
-
-```
-
-```{r}
-# kable(fabric_tab)
-```
-
 ## Graphes 
 ::: {.panel-tabset}
 
@@ -620,19 +644,18 @@ V(mygraph)$label.cex = 0.5
 
 ### 1
 ```{r}
-plot(mygraph, edge.arrow.size=0, vertex.size=2, layout=layout.circle, label.y = 90, vertex.label.dist=0.5)
+plot(mygraph, edge.arrow.size=0, vertex.size=2, layout=layout.circle, vertex.label.dist=0.5)
 ```
 
 ### 2
 ```{r}
-E(mygraph)$color = "grey"
-plot(mygraph, edge.arrow.size=0, vertex.size=2, layout=layout.sphere, label.y = 90, vertex.label.dist=0.5, edge.width=E(mygraph)$weight)
+plot(mygraph, edge.arrow.size=0, vertex.size=2, layout=layout.circle, label.y = 90, vertex.label.dist=0.5,edge.width=E(mygraph)$weight)
 ```
 :::
 
 ```{r}
 df_oui = df_oui %>%
-  arrange(corr) %>%
+  arrange(desc(corr)) %>%
   mutate(Corrélation = if_else(corr > 30, "Non", "Oui"),
          couleur = if_else(corr < 30, "grey", "#1e39e1"))
 df_oui %>%
@@ -649,3 +672,51 @@ df_oui %>%
    xlab("Nom de l'espèce")
 ```
 
+# Test
+
+::: {.panel-tabset}
+
+## Abondance
+
+```{r}
+#| results: asis
+#| fig-width: 6
+#| fig-height: 4
+esp_coocc = c(sp_name, df_oui$nom[1:5])
+
+df_coocc = df_all_sp %>%
+  filter(nom_espece %in% esp_coocc)
+
+df_coocc <- df_coocc%>%
+    group_by(nom_espece, an_sem) %>%
+    summarise(sum_ab = sum(abondance)) %>%
+    group_by(nom_espece) %>%
+    mutate(sum_sp = sum(sum_ab),
+           sum_ab_norm = sum_ab/sum_sp) %>%
+    arrange(an_sem) %>%
+    relocate(nom_espece, .before = an_sem) 
+
+plot_e1 <- df_coocc %>%
+    e_charts(an_sem) %>%       # axe x pour echarts
+    e_line(sum_ab, symbol = "none")             # type de représentation pour l'axe y
+
+plot_e2 <- df_coocc %>%
+    e_charts(an_sem) %>%       # axe x pour echarts
+    e_line(sum_ab_norm, symbol = "none")             # type de représentation pour l'axe y
+
+aes_echarts(plot_e = plot_e1, xlab = "Semaine de collection",
+            ylab = "Indice",
+            title = "Indice par semaine selon les années",
+            line_color = sp_colors)
+```
+
+## Abondance relative
+
+```{r}
+aes_echarts(plot_e = plot_e2, xlab = "Semaine de collection",
+            ylab = "Indice norm",
+            title = "Indice norm par semaine selon les années",
+            line_color = sp_colors)
+```
+
+:::
