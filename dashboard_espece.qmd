@@ -351,53 +351,6 @@ Nombre de jardins dans lesquels au moins un individu a été observé :
 ### Row 1
 
 :::: panel-tabset
-#### Truc
-::: panel-tabset
-
-```{r}
-#| results: asis
-#| fig-width: 6
-#| fig-height: 4
-for(i in sort(unique(df_sp$annee))) {
-  cat(sprintf(paste0("\n\n##### ", i,"\n\n")))
-  print(i)
-  # a = plot(x = c(1,2,3), y = c(10,20,30))
-  # print(a)
-  df_mois = data.frame(mois = c("01", "02", "03", "04", "05", "06",
-                              "07", "08", "09", "10", "11", "12"),
-                     jardin_id = 0,
-                     latitude = NA,
-                     longitude = NA,
-                     sum_ab = 0)
-  df_migration = df_sp %>%
-    filter(annee == i) %>%
-    mutate(mois = strftime(date_collection, "%m")) %>%
-    group_by(mois, jardin_id, latitude, longitude) %>%
-    summarise(sum_ab = sum(abondance)) %>%
-    filter(sum_ab != 0) %>%
-    dplyr::union(df_mois)
-
-  if (i == as.numeric(strftime(Sys.Date(), "%Y")) ){
-    df_migration = df_migration %>%
-      filter(mois <= strftime(Sys.Date(), "%m"))
-  }
-
-  gg = ggplot(france) +
-    geom_sf(fill = "#f0f0f0", color = "#a0a0a0") +
-    geom_point(data = df_migration, aes(x = longitude, y=latitude, frame = mois), color = "red") +
-    theme_minimal()
-
-  gg = gg %>%
-    ggplotly()  %>%
-    animation_opts(transition = 0, frame = 1000)
-  
-  print(gg)
-
-}
-```
-:::
-
-## Column 2
 
 #### Bidule
 
@@ -425,7 +378,48 @@ gg_carte(an = 2022, df_sp = df_sp, france = france)
 
 ::: panel-tabset
 
+```{r chunk-label, fig.show='animate', ffmpeg.format='gif', dev='jpeg'}
+for (year in sort(unique(df_sp$annee))) {
+  df_carte_mois <- df_sp %>%
+    filter(annee == year)
+
+  cat(sprintf(paste0("\n\n### ", year,"\n\n")))
+
+  vec_mois = c("01", "02", "03", "04", "05", "06",
+               "07", "08", "09", "10", "11", "12")
+  if (year == as.numeric(strftime(Sys.Date(), "%Y")) ){
+    vec_mois = vec_mois[1:as.numeric(max(strftime(df_carte_mois$date_collection, "%m")))]
+  }
+
+  for (mois in vec_mois) {
+    gg = gg_carte_mois(month = mois, df_sp = df_carte_mois, france = france)
+    ggsave(filename = paste0("gif/",year, mois,"carte.png"), plot = gg, width=2.5, height=2.5)
+  }
+
+  imgs <- list.files("gif/", full.names = TRUE)
+  img_list <- lapply(imgs, image_read)
+  img_joined <- image_join(img_list) ## Jonction des images
+  img_animated <- image_animate(img_joined, fps = 2.5) ## Animation (2 frames par seconde)
+  print(img_animated) ## Afficher le gif
+  image_write(image = img_animated,
+            path = paste0("out/gif/", year, ".gif"))
+  file.remove(imgs) ## Suppression des images dans le dossier
+}
+# print(plot(x = c(1,2,3), y = c(20,50,32)))
+# a = 1
+# print(a)
+```
+:::
+
+Test de texte
+
+#### Toutes les cartes
+
+::: panel-tabset
 ```{r}
+#| results: asis
+#| fig-width: 6
+#| fig-height: 4
 for (year in sort(unique(df_sp$annee))) {
   df_carte_mois <- df_sp %>%
     filter(annee == year)
@@ -440,19 +434,12 @@ for (year in sort(unique(df_sp$annee))) {
   
   for (mois in vec_mois) {
     gg = gg_carte_mois(month = mois, df_sp = df_carte_mois, france = france)
-    ggsave(filename = paste0("gif/",year, mois,"carte.png"), plot = gg, width=2.5, height=2.5)
+    print(gg)
   }
-  
-  imgs <- list.files("gif/", full.names = TRUE)
-  img_list <- lapply(imgs, image_read)
-  img_joined <- image_join(img_list) ## Jonction des images
-  img_animated <- image_animate(img_joined, fps = 2) ## Animation (2 frames par seconde)
-  print(img_animated) ## Afficher le gif
-  file.remove(imgs) ## Suppression des images dans le dossier
 }
 ```
-
 :::
+
 ::::
 
 # Cartes  d'abondance {orientation="columns"}
@@ -460,6 +447,10 @@ for (year in sort(unique(df_sp$annee))) {
 ## Par années + valuebox {height="100%"}
 
 ### Cartes par années
+
+:::: panel-tabset
+
+#### Abondance totale
 
 ::: panel-tabset
 ```{r}
@@ -486,6 +477,35 @@ for(an in sort(unique(df_all_sp$annee))) {
 }
 ```
 :::
+
+#### Abondance moyenne par jardin
+
+::: panel-tabset
+```{r}
+#| results: asis
+#| fig-width: 6
+#| fig-height: 4
+for(an in sort(unique(df_all_sp$annee))) {
+  cat(sprintf("\n\n## %d\n\n", an))
+  
+  df_dep_an = df_dep_y %>%
+    filter(annee == an) 
+  
+  codes = reg_dep$code_departement[which(!(reg_dep$code_departement %in% df_dep_an$dept_code))]
+  df_vide = data.frame(dept_code = codes, annee = an, n = 0, cl_ab = "0")
+  df_dep_an = df_dep_an %>% bind_rows(df_vide) %>%
+    filter(str_length(dept_code) == 2) %>%
+    arrange(dept_code)
+  df_dep_an = df_dep_an[c(1:6, 29:30, 7:28, 31:96),]
+
+  print(carte_ab(shape_map = france, fill_map = df_dep_an$cl_moy,
+                 fill_color = couleurs, fill_cat = cat_carte_moy,
+                 fill_title = paste0("Abondance en ", an)))
+
+}
+```
+:::
+::::
 
 ### Valuebox
 
@@ -567,12 +587,12 @@ plot_e2 <- df_coocc %>%
     e_line(sum_ab_norm, symbol = "none")             # type de représentation pour l'axe y
 
 aes_echarts(plot_e = plot_e1, xlab = "Semaine de collection",
-            ylab = "Indice",
-            title = "Indice par semaine selon les années",
+            ylab = "Abondance",
+            title = "Abondance par semaine selon les années",
             line_color = sp_colors)
 ```
 
-## Abondance relative
+## Indice d'activité
 
 ```{r}
 aes_echarts(plot_e = plot_e2, xlab = "Semaine de collection",
@@ -586,4 +606,4 @@ aes_echarts(plot_e = plot_e2, xlab = "Semaine de collection",
 
 Abondance totale : nombre total d'individus observés par semaine
 
-Abondance relative : observations d'une espèce par semaine / observations totale de l'espèce depuis 2019
+Indice d'activité : observations d'une espèce par semaine / observations totale de l'espèce depuis 2019
