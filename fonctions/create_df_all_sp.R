@@ -21,7 +21,11 @@ library(here)
 
 readRenviron(".env")
 source("fonctions/function_import_from_mosaic.R")
+source("fonctions/var.R")
 
+
+### Dataframe des données pour toutes les espèces
+# -----------------------------------------------
 
 if (file.exists("data/rdata/df_all_sp.rds") &                                   # Test de l'existence du fichier rds
     Sys.Date()-as.Date(file.info("data/rdata/df_all_sp.rds")$ctime) <= 7) {     # Vérification qu'il date de moins de 7 jours

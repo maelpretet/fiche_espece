@@ -15,14 +15,20 @@
 #
 # ------------------------------------
 
+source("fonctions/library.R")
+source("fonctions/var.R")
+
+if (!exists("sp_name")) {
+  sp_name = "Amaryllis"
+}
+
 #########################################
 #---------- Dataframe initial ----------#
 #########################################
 
 # Df de toutes les espèces
 if (!exists("df_all_sp")) {
-  df_all_sp = import_from_mosaic(query = read_sql_query("SQL/export_a_plat_OPJ.sql"),
-                                 database_name = "spgp")
+  source("fonctions/create_df_all_sp.R")
 }
 
 df_all_sp = df_all_sp %>%
@@ -72,6 +78,10 @@ nb_max_ab = df_sp %>%
 #------------- Par années --------------#
 #########################################
 
+# On calcule le nombre d'observations sur df_sp, sinon le summarise par ligne
+# prendrait en compte un nombre d'observations x 28 (nombre d'espèces et donc
+# de lignes à chaque observation)
+
 # Semaine
 df_nb_obs_date <- df_sp %>%
   mutate(date = as.Date(date_collection)) %>%
@@ -86,22 +96,30 @@ df_nb_obs_mois <- df_sp %>%
   summarise(n = n()) %>%
   mutate(date_mois = as.Date(paste0(date_mois, "-01")))
 
+# Calcul du nombre de jardins participant sur toute l'opération par semaine
+nb_part_par_sem = df_all_sp %>%
+  mutate(num_semaine = as.integer(num_semaine)) %>%
+  group_by(annee, num_semaine) %>%
+  summarise(nb_part = n_distinct(participation_id))
+
 # Abondance relative
 df_ab_rel <- df_sp %>%
   mutate(num_semaine = as.integer(num_semaine)) %>%
   group_by(annee, num_semaine) %>%
-  summarise(sum_ab = sum(abondance),              # Somme des abondances
-            nb_jard = n_distinct(jardin_id)) %>%  # Nombre de jardins par semaine
-  mutate(sum_ab_rel = sum_ab/nb_jard) %>%  # Division par le nombre de jardins
+  summarise(sum_ab = sum(abondance)) %>%        # Somme des abondances
+  left_join(nb_part_par_sem, by = c("annee" = "annee",
+                                      "num_semaine" = "num_semaine")) %>%
+  mutate(sum_ab_rel = sum_ab/nb_part) %>%  # Division par le nombre de participations
   arrange(num_semaine)
 
 # Fréquence relative
 df_freq_rel <- df_sp_ab %>%
   mutate(num_semaine = as.integer(num_semaine)) %>%
   group_by(annee, num_semaine) %>%
-  summarise(sum_obs = n(),              # Somme des observations
-            nb_jard = n_distinct(jardin_id)) %>%  # Nombre de jardins par semaine
-  mutate(freq_rel = sum_obs/nb_jard) %>%   # Division par le nombre de jardins
+  summarise(sum_obs = n()) %>%       # Somme des observations
+  full_join(nb_part_par_sem, by = c("annee" = "annee",
+                                      "num_semaine" = "num_semaine")) %>%
+  mutate(freq_rel = if_else(is.na(sum_obs), 0, sum_obs/nb_part)) %>%   # Division par le nombre de participations
   arrange(num_semaine)
 
 #########################################
@@ -171,6 +189,59 @@ df_jardin_point = df_sp %>%
   filter(!is.na(latitude)) %>%
   mutate(Présence = if_else(sum_ab == 0, "Non vu", "Vu")) %>%
   arrange(Présence)
+
+# Df des jardins positionnés sur la carte par année
+df_jardin_point_year = df_sp %>%
+  group_by(annee, jardin_id, latitude, longitude) %>%
+  summarise(sum_ab = sum(abondance)) %>%
+  filter(!is.na(latitude)) %>%
+  mutate(Présence = if_else(sum_ab == 0, "Non vu", "Vu")) %>%
+  arrange(Présence)
+
+
+# Fonction à appliquer aux df pour les barycentres
+bary_function <- function(df,
+                          gb1 = c("annee", "jardin_id", "latitude", "longitude"),
+                          gb2 = c("annee")){
+ 
+  df <- df %>%
+    group_by(!!!syms(gb1)) %>%     # On groupe selon les paramètres de gb1
+    summarise(sum_ab = sum(abondance)) %>%
+    filter(!is.na(latitude)) %>%
+    ungroup() %>%
+    mutate(lat_pond = latitude*sum_ab,          # Calcul des latitudes et
+           long_pond = longitude*sum_ab) %>%    # longitudes pondérées
+    group_by(!!!syms(gb2)) %>%           # On groupe selon les paramètres de gb2
+    # Pour chaque année, on somme les latitudes et longitudes pondérées
+    # et l'abondance totale
+    summarise(across(matches("*_pond"), \(x) sum(x, na.rm = TRUE)),
+              across(matches("sum_ab"), sum)) %>%
+    # On divise la latitude et la longitude pondérée de chaque année par 
+    # la pondération (donc la somme des abondances)
+    mutate(latitude = lat_pond/sum_ab,
+           longitude = long_pond/sum_ab)
+  
+  return(df)
+}
+
+# Df barycentre de tous les jardins chaque année
+# A refaire : enlever la pondération
+df_bary_base<- cbind(bary_function(df = df_all_sp %>%
+                                     mutate(abondance = 1)),
+                     data.frame(nom_espece = "Jardins",
+                                color = "blue"))
+
+# Df du barycentre pour une espèce
+df_bary_one_sp <- cbind(bary_function(df = df_sp),
+                        data.frame(nom_espece = sp_name,
+                                   color = "red"))
+
+# Df des barycentres pour toutes les espèces
+df_bary_all_sp <- cbind(bary_function(df = df_all_sp,
+                                gb1 = c("annee", "jardin_id", "latitude",
+                                        "longitude", "nom_espece"),
+                                gb2 = c("annee", "nom_espece")),
+                        data.frame(color = "red"))
 
 # Df migration
 
@@ -274,24 +345,31 @@ df_nbsp_all = df_all_sp %>%
   group_by(nom_espece) %>%
   summarise(n = n())
 
-df_heatmap = data.frame()
-for (name in sort(liste_principale, method = "radix")) {
-  df_tmp = df_all_sp %>%
-    select(participation_id, an_sem, annee, nom_espece, abondance) %>%
-    arrange(nom_espece) %>%
-    pivot_wider(names_from = nom_espece, values_from = abondance) %>%
-    filter(!!sym(name) != 0) %>%
-    mutate(participation_id = as.character(participation_id),
-           annee = as.character(annee)) %>%
-    mutate_if(~ any(is.numeric(.)), ~ if_else(.==0, 0, 1)) %>%
-    select(!c(participation_id, an_sem, annee)) %>%
-    summarise(across(where(is.numeric), sum))
-  df_tmp = df_tmp / (df_nbsp_all %>% filter(nom_espece == name))$n
-  df_heatmap = rbind(df_heatmap, df_tmp)
+if (file.exists("data/rdata/df_heatmap.rds") &
+    Sys.Date()-as.Date(file.info("data/rdata/df_heatmap.rds")$ctime) <= 1) {
+  # Lecture du fichier RDS
+  df_heatmap = readRDS("data/rdata/df_heatmap.rds")
+}else{
+  df_heatmap = data.frame()
+  
+  for (name in sort(liste_principale, method = "radix")) {
+    df_tmp = df_all_sp %>%
+      select(participation_id, an_sem, annee, nom_espece, abondance) %>%
+      arrange(nom_espece) %>%
+      pivot_wider(names_from = nom_espece, values_from = abondance) %>%
+      filter(!!sym(name) != 0) %>%
+      mutate(participation_id = as.character(participation_id),
+             annee = as.character(annee)) %>%
+      mutate_if(~ any(is.numeric(.)), ~ if_else(.==0, 0, 1)) %>%
+      select(!c(participation_id, an_sem, annee)) %>%
+      summarise(across(where(is.numeric), sum))
+    df_tmp = df_tmp / (df_nbsp_all %>% filter(nom_espece == name))$n
+    df_heatmap = rbind(df_heatmap, df_tmp)
+  }
+  
+  rownames(df_heatmap) = sort(liste_principale, method = "radix")
+  df_heatmap = as.matrix(df_heatmap)
+  
+  saveRDS(object = df_heatmap, file = "data/rdata/df_heatmap.rds")
 }
-
-rownames(df_heatmap) = sort(liste_principale, method = "radix")
-df_heatmap = as.matrix(df_heatmap)
-
-
 
