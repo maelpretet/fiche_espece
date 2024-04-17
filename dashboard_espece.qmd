@@ -21,42 +21,14 @@ execute:
 ```{r}
 # Variables constantes
 sp_name = params$sp_name
-year_colors = c("#eb6ecf", "#8a6eeb", "#6e9deb", "#6eebb4", "#ebbc6e",
-                "#eb816e", "#d01456", "#783628", "#0b15de", "#4fdce0")
-sp_colors = c("#f00000", "#4bdadc", "#31c1f3", "#14779a", "#003ca4", "#0c1eff")
-color_flag = "red"
-#liste principale des papillons de l'observatoire
-liste_principale <- c("Machaons","Flambés", "Demi-deuils",
-                      "Paon du jour", "Vulcain", "Belle-dame", "Petites tortues",
-                      "Robert-le-diable", "Tabac d'Espagne", "Silène", "Sylvains",
-                      "Souci", "Aurores", "Piérides blanches","Gazé","Citrons","Amaryllis",
-                      "Myrtil", "Procris", "Mégères", "Tircis", "Lycènes bleus",
-                      "Argus verts", "Brun des pélargoniums", "Cuivré", "Hespérides tachetées",
-                      "Hespérides orangées", "Moro-sphinx")
-# Départements avec numéro et région
-reg_dep = read.csv2("data/departements-france.csv", sep=",")
+source("fonctions/var.R")
 ```
 
 # `{r} params$sp_name` {orientation="columns"}
 
 ```{r}
 # Librairies
-library(cowplot)
-library(dplyr)
-library(echarts4r)
-library(ggplot2)
-library(here)
-library(igraph)
-library(knitr)
-library(magick)
-library(plotly)
-library(RColorBrewer)
-library(rlang)
-library(RMySQL)
-library(scales)
-library(stringr)
-library(tibble)
-library(tidyr)
+source("fonctions/library.R")
 ```
 
 ```{r}
@@ -67,7 +39,7 @@ source("fonctions/function_graphics.R")
 source("fonctions/function_import_from_mosaic.R")
 # Création des data frame
 source("fonctions/create_df_all_sp.R")
-source("fonctions/create_df.R")
+source("fonctions/create_df_one_sp.R")
 ```
 
 ## Row 1
@@ -180,6 +152,84 @@ gg = df_ab_rel %>%
 ggplotly(gg) %>%
   animation_opts(transition = 0)
 ```
+
+# Tests ab / obs
+
+::::panel-tabset
+
+#### Abondance
+
+:::panel-tabset
+
+### No div
+
+```{r}
+df_ab_tot = df_all_sp %>%
+  mutate(date = as.Date(date_collection)) %>%
+  group_by(date) %>%
+  summarise(n = sum(abondance)) %>%
+  arrange(date)
+
+div_obs = max((df_sp %>% group_by(an_sem) %>% summarise(n = sum(abondance)))$n) /
+  max(df_ab_tot$n)
+
+histo_line(df_histo = df_sp %>% 
+             mutate(date = as.Date(date_collection)) %>%
+             group_by(date) %>%
+             summarise(sum_ab = sum(abondance)),
+           df_ligne = df_ab_tot, div = 1, ytxtsec = "Abondance totale")
+```
+
+### div
+
+```{r}
+histo_line(df_histo = df_sp %>% 
+             mutate(date = as.Date(date_collection)) %>%
+             group_by(date) %>%
+             summarise(sum_ab = sum(abondance)),
+           df_ligne = df_ab_tot, div = div_obs, ytxtsec = "Abondance totale")
+```
+
+:::
+
+#### Observations
+
+:::panel-tabset
+
+### No div
+
+```{r}
+df_ab_tot = df_all_sp %>%
+  mutate(date = as.Date(date_collection)) %>%
+  group_by(date) %>%
+  summarise(n = n()) %>%
+  arrange(date)
+
+div_obs = max((df_sp %>% filter(abondance != 0) %>% group_by(an_sem) %>% summarise(n = n()))$n) /
+  max(df_ab_tot$n)
+
+histo_line(df_histo = df_sp %>% 
+             filter(abondance != 0) %>%
+             mutate(date = as.Date(date_collection)) %>%
+             group_by(date) %>%
+             summarise(sum_ab = n()),
+           df_ligne = df_ab_tot, div = 1, ytxtsec = "Observations totale", ytxt = "Observations")
+```
+
+### div
+
+```{r}
+histo_line(df_histo = df_sp %>% 
+             filter(abondance != 0) %>%
+             mutate(date = as.Date(date_collection)) %>%
+             group_by(date) %>%
+             summarise(sum_ab = n()),
+           df_ligne = df_ab_tot, div = div_obs, ytxtsec = "Observations totale", ytxt = "Observations")
+```
+
+:::
+
+::::
 
 # Répartition {orientation="columns"}
 
@@ -336,6 +386,48 @@ gg %>%
   animation_opts(transition = 0, frame = 1000)
 ```
 
+```{r}
+#| title: Barycentre
+
+a = sort(c(sp_name, "Jardins"))
+b = c("#d50404", "#d50404")
+b[which(a == "Jardins")] = "#0baaff"
+
+gg =ggplot(france) +
+  geom_sf(fill = "#f0f0f0", color = "#a0a0a0") +
+  geom_point(data = rbind(df_bary_one_sp, df_bary_base),
+             aes(x = longitude, y=latitude, color = nom_espece, frame = annee)) +
+  scale_color_manual(values = b) +
+  theme_minimal()
+
+gg %>%
+  ggplotly()  %>%
+  animation_opts(transition = 0, frame = 1000)
+
+```
+
+
+```{r}
+#| title: All.sp.bary
+
+a = sort(c(unique(df_bary_all_sp$nom_espece), "Jardins"))
+b = rep("#5F5F5F", length(a))
+b[which(a == "Jardins")] = "#0baaff"
+b[which(a == sp_name)] = "#d50404"
+
+gg = ggplot(france) +
+  geom_sf(fill = "#f0f0f0", color = "#a0a0a0") +
+  geom_point(data = rbind(df_bary_all_sp, df_bary_base),
+             aes(x = longitude, y = latitude, color = nom_espece, frame = annee)) +
+  scale_color_manual(values = b) +
+  theme_minimal()
+
+gg %>%
+  ggplotly() %>%
+  animation_opts(transition = 0, frame = 1000)
+```
+
+
 ### Valuebox
 
 ::: {.valuebox icon="flower3" color="#00BBC1"}
@@ -354,64 +446,19 @@ Nombre de jardins dans lesquels au moins un individu a été observé :
 
 #### Bidule
 
-::: panel-tabset
-### 2020
-
 ```{r}
-gg_carte(an = 2020, df_sp = df_sp, france = france)
+# # l <- htmltools::tagList()
+# i = 1
+# for (year in c(2019:2024)) {
+#   cat(sprintf(paste0("\n\n##", year, "\n\n")))
+#   x <- gg_carte(an = year, df_sp = df_sp, france = france)
+#   cat(htmltools::renderTags(as.widget(x))$html)
+#   # l[[i]] <- gg_carte(an = year, df_sp = df_sp, france = france)
+#   # i = i+1
+# }
+# # l
 ```
 
-### 2021
-
-```{r}
-gg_carte(an = 2021, df_sp = df_sp, france = france)
-```
-
-### 2022
-
-```{r}
-gg_carte(an = 2022, df_sp = df_sp, france = france)
-```
-:::
-
-#### Gif
-
-::: panel-tabset
-
-```{r chunk-label, fig.show='animate', ffmpeg.format='gif', dev='jpeg'}
-for (year in sort(unique(df_sp$annee))) {
-  df_carte_mois <- df_sp %>%
-    filter(annee == year)
-
-  cat(sprintf(paste0("\n\n### ", year,"\n\n")))
-
-  vec_mois = c("01", "02", "03", "04", "05", "06",
-               "07", "08", "09", "10", "11", "12")
-  if (year == as.numeric(strftime(Sys.Date(), "%Y")) ){
-    vec_mois = vec_mois[1:as.numeric(max(strftime(df_carte_mois$date_collection, "%m")))]
-  }
-
-  for (mois in vec_mois) {
-    gg = gg_carte_mois(month = mois, df_sp = df_carte_mois, france = france)
-    ggsave(filename = paste0("gif/",year, mois,"carte.png"), plot = gg, width=2.5, height=2.5)
-  }
-
-  imgs <- list.files("gif/", full.names = TRUE)
-  img_list <- lapply(imgs, image_read)
-  img_joined <- image_join(img_list) ## Jonction des images
-  img_animated <- image_animate(img_joined, fps = 2.5) ## Animation (2 frames par seconde)
-  print(img_animated) ## Afficher le gif
-  image_write(image = img_animated,
-            path = paste0("out/gif/", year, ".gif"))
-  file.remove(imgs) ## Suppression des images dans le dossier
-}
-# print(plot(x = c(1,2,3), y = c(20,50,32)))
-# a = 1
-# print(a)
-```
-:::
-
-Test de texte
 
 #### Toutes les cartes
 
@@ -589,7 +636,8 @@ plot_e2 <- df_coocc %>%
 aes_echarts(plot_e = plot_e1, xlab = "Semaine de collection",
             ylab = "Abondance",
             title = "Abondance par semaine selon les années",
-            line_color = sp_colors)
+            line_color = sp_colors,
+            one_y = FALSE)
 ```
 
 ## Indice d'activité
@@ -598,7 +646,8 @@ aes_echarts(plot_e = plot_e1, xlab = "Semaine de collection",
 aes_echarts(plot_e = plot_e2, xlab = "Semaine de collection",
             ylab = "Indice norm",
             title = "Indice norm par semaine selon les années",
-            line_color = sp_colors)
+            line_color = sp_colors,
+            one_y = FALSE)
 ```
 :::
 
@@ -607,3 +656,25 @@ aes_echarts(plot_e = plot_e2, xlab = "Semaine de collection",
 Abondance totale : nombre total d'individus observés par semaine
 
 Indice d'activité : observations d'une espèce par semaine / observations totale de l'espèce depuis 2019
+
+# Heatmap
+
+## Heatmap
+
+```{r}
+heatmap(df_heatmap, Colv = NA, Rowv = NA)
+```
+
+## geom_tile
+
+```{r}
+ggplot(reshape2::melt(df_heatmap), aes(x = Var1, y = Var2, fill = value)) +
+  geom_tile(color = "white") +
+  theme(axis.title.x = element_blank(),
+        axis.title.y = element_blank(),
+        axis.text.x = element_text(size = 8, angle = 90),
+        axis.text.y = element_text(size = 8)) +
+  scale_fill_gradient(low = "white", high = "red") +
+  coord_fixed()
+```
+
