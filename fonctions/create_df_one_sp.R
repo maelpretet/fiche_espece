@@ -237,11 +237,11 @@ df_bary_one_sp <- cbind(bary_function(df = df_sp),
                                    color = "red"))
 
 # Df des barycentres pour toutes les espèces
-df_bary_all_sp <- cbind(bary_function(df = df_all_sp,
-                                gb1 = c("annee", "jardin_id", "latitude",
-                                        "longitude", "nom_espece"),
-                                gb2 = c("annee", "nom_espece")),
-                        data.frame(color = "red"))
+df_bary_all_sp <- bary_function(df = df_all_sp,
+                        gb1 = c("annee", "jardin_id", "latitude",
+                                "longitude", "nom_espece"),
+                        gb2 = c("annee", "nom_espece")) %>%
+  mutate(nom_espece = if_else(nom_espece == sp_name, sp_name, "Autres"))
 
 # Df migration
 
@@ -254,20 +254,20 @@ df_dep_y = df_sp %>%
   group_by(dept_code, annee) %>%
   summarise(n = sum(abondance),
             nb_jard = n_distinct(jardin_id)) %>%
-  mutate(ab_moy = n/nb_jardin,
+  mutate(ab_moy = n/nb_jard,
          cl_ab = case_when(n == 0 ~ "0",
                            n >= 1 & n <= 25 ~ "1-25",
                            n > 25 & n <= 70 ~ "26-70",
                            n > 70 & n <= 100 ~ "71-100",
                            n > 100 ~ "+ de 100"),
          cl_moy = case_when(ab_moy == 0 ~ "0",
-                            ab_moy > 0 & ab_moy <= 0.0003 ~ "0-3e4",
-                            ab_moy > 0.0003 & ab_moy <= 0.006 ~ "3e4-6e3",
-                            ab_moy > 0.006 & ab_moy <= 0.02 ~ "6e3-2e2",
-                            ab_moy > 0.02 ~ "+ de 0.02"))
+                            ab_moy > 0 & ab_moy <= 1 ~ "0-1",
+                            ab_moy > 1 & ab_moy <= 5 ~ "2-5",
+                            ab_moy > 5 & ab_moy <= 10 ~ "6-10",
+                            ab_moy > 10 ~ "+ de 10"))
 
 cat_carte = c("0", "1-25", "26-70", "71-100", "+ de 100")
-cat_carte_moy = c("0", "0-4e4", "4e4-6e3", "6e3-2e2", "+ de 0.02")
+cat_carte_moy = c("0", "0-1", "2-5", "6-10", "+ de 10")
 couleurs = c("#7f7f7f", "#ffef6c", "#f7b905", "#ff7400", "#ff0000", "#950000")
 
 # Df abondance sur toutes les données
