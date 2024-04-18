@@ -23,7 +23,7 @@ liste_principale <- c("Machaons","Flambés", "Demi-deuils",
                       "Hespérides orangées", "Moro-sphinx")
 
 # Data frame des espèces
-df_all_sp = import_from_mosaic(query = read_sql_query("SQL/export_a_plat_OPJ.sql"),
+df_sp_for_names = import_from_mosaic(query = read_sql_query("SQL/export_a_plat_OPJ.sql"),
                                database_name = "spgp") %>%
   filter(!is.na(dept_code),         # suppression des départements nuls
          str_length(dept_code)==2,  # suppression des drom-com
@@ -37,7 +37,7 @@ df_all_sp = import_from_mosaic(query = read_sql_query("SQL/export_a_plat_OPJ.sql
 
 time = Sys.time()
 # Boucle sur les noms d'espèces
-for (sp_name in unique(df_all_sp$nom_espece)) {
+for (sp_name in unique(df_sp_for_names$nom_espece)) {
   filename = paste0("dashboard_espece_", sp_name, ".html")
   quarto_render(input = "dashboard_espece.qmd",
                 execute_params = list("sp_name" = sp_name),
@@ -49,21 +49,21 @@ for (sp_name in unique(df_all_sp$nom_espece)) {
 }
 print(Sys.time() - time)
 
-time = Sys.time()
-# Boucle sur les noms d'espèces
-for (sp_name in unique(df_all_sp$nom_espece)) {
-  filename = paste0("fiche_espece_", sp_name, ".html")
-  quarto_render(input = "fiche_espece.qmd",
-                execute_params = list("sp_name" = sp_name),
-                output_file = filename)
-  
-  file.copy(from = filename,
-            to = paste0("out/", filename), overwrite = TRUE)
-  file.remove(filename)
-}
-print(Sys.time() - time)
+# time = Sys.time()
+# # Boucle sur les noms d'espèces
+# for (sp_name in unique(df_sp_for_names$nom_espece)) {
+#   filename = paste0("fiche_espece_", sp_name, ".html")
+#   quarto_render(input = "fiche_espece.qmd",
+#                 execute_params = list("sp_name" = sp_name),
+#                 output_file = filename)
+#   
+#   file.copy(from = filename,
+#             to = paste0("out/", filename), overwrite = TRUE)
+#   file.remove(filename)
+# }
+# print(Sys.time() - time)
 
 # Générer le fichier html
-generate_html(sort(unique(df_all_sp$nom_espece)))
+generate_html(sort(unique(df_sp_for_names$nom_espece)))
 
 
