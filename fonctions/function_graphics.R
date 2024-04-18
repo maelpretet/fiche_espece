@@ -26,7 +26,7 @@ histo_line <- function(df_histo, x_h = "date", y_h = "sum_ab",
 }
 
 # Graphique en echarts4r
-aes_echarts <- function(plot_e, xlab, ylab, title, line_color){
+aes_echarts <- function(plot_e, xlab, ylab, title, line_color, one_y = TRUE){
   
   plot_e <- plot_e %>%
     # e_bar(sum_ab) %>%
@@ -44,6 +44,11 @@ aes_echarts <- function(plot_e, xlab, ylab, title, line_color){
              nameGap= 50) %>%
     e_title(text = paste(title),
             textStyle = list(fontSize = list(14)))
+  
+  if (one_y) {
+    plot_e <- plot_e %>%
+      e_x_axis(max = 52) 
+  }
   
   return(plot_e)
 }
@@ -113,7 +118,8 @@ gg_carte_mois = function(month, df_sp, france){
   gg = ggplot(france) +
     geom_sf(fill = "#f0f0f0", color = "#a0a0a0") +
     geom_point(data = df_migration, aes(x = longitude, y=latitude), color = "red") +
-    theme_minimal()
+    theme_minimal() +
+    ggtitle(month)
   
   return(gg)
 }
