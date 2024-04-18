@@ -410,16 +410,19 @@ gg %>%
 ```{r}
 #| title: All.sp.bary
 
-a = sort(c(unique(df_bary_all_sp$nom_espece), "Jardins"))
-b = rep("#5F5F5F", length(a))
-b[which(a == "Jardins")] = "#0baaff"
-b[which(a == sp_name)] = "#d50404"
+legende = sort(c(unique(df_bary_all_sp$nom_espece), "Jardins"))
+col_leg = rep("#5F5F5F", length(legende))
+col_leg[which(legende == "Jardins")] = "#0baaff"
+col_leg[which(legende == sp_name)] = "#d50404"
 
 gg = ggplot(france) +
   geom_sf(fill = "#f0f0f0", color = "#a0a0a0") +
   geom_point(data = rbind(df_bary_all_sp, df_bary_base),
              aes(x = longitude, y = latitude, color = nom_espece, frame = annee)) +
-  scale_color_manual(values = b) +
+  geom_point(data = df_bary_one_sp,
+             aes(x = longitude, y=latitude, frame = annee),
+             color = "#d50404") +
+  scale_color_manual(values = col_leg) +
   theme_minimal()
 
 gg %>%
@@ -677,4 +680,28 @@ ggplot(reshape2::melt(df_heatmap), aes(x = Var1, y = Var2, fill = value)) +
   scale_fill_gradient(low = "white", high = "red") +
   coord_fixed()
 ```
+
+# Test grega
+
+```{r}
+a = df_sp %>%
+  group_by(jardin_id) %>%
+  summarise(n = n()) %>%
+  filter(n > 5)
+
+df_test_grega = df_all_sp %>%
+  filter(jardin_id %in% a$jardin_id) %>%
+  mutate(abondance2 = if_else(abondance > 10, 10, abondance)) %>%
+  select(nom_espece, abondance, abondance2)
+
+ggplot(df_test_grega, aes(x = nom_espece, y = abondance2)) +
+  geom_boxplot() +
+  coord_flip()
+
+ggplot((df_test_grega %>%filter(nom_espece == sp_name) %>% as.data.frame()),
+       aes(x = nom_espece, y = abondance2)) +
+  geom_boxplot() +
+  coord_flip()
+```
+
 
