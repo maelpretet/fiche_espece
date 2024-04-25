@@ -225,11 +225,21 @@ bary_function <- function(df,
 }
 
 # Df barycentre de tous les jardins chaque année
-# A refaire : enlever la pondération
-df_bary_base<- cbind(bary_function(df = df_all_sp %>%
-                                     mutate(abondance = 1)),
-                     data.frame(nom_espece = "Jardins",
-                                color = "blue"))
+df_bary_base<- df_all_sp %>%
+  group_by(annee, jardin_id, latitude, longitude) %>%
+  summarise(sum_ab = n()) %>%
+  filter(!is.na(latitude)) %>%
+  ungroup() %>%
+  mutate(lat_pond = latitude*sum_ab,
+         long_pond = longitude*sum_ab) %>%
+  group_by(annee) %>%
+  summarise(across(matches("*_pond"), \(x) sum(x, na.rm = TRUE)),
+            across(matches("sum_ab"), sum)) %>%
+  mutate(latitude = lat_pond/sum_ab,
+         longitude = long_pond/sum_ab,
+         nom_espece = "Jardins",
+         color = "#0baaff") %>%
+  as.data.frame()
 
 # Df du barycentre pour une espèce
 df_bary_one_sp <- cbind(bary_function(df = df_sp),
@@ -240,8 +250,9 @@ df_bary_one_sp <- cbind(bary_function(df = df_sp),
 df_bary_all_sp <- bary_function(df = df_all_sp,
                         gb1 = c("annee", "jardin_id", "latitude",
                                 "longitude", "nom_espece"),
-                        gb2 = c("annee", "nom_espece")) %>%
-  mutate(nom_espece = if_else(nom_espece == sp_name, sp_name, "Autres"))
+                        gb2 = c("annee", "nom_espece")) 
+# %>%
+#   mutate(nom_espece = if_else(nom_espece == sp_name, sp_name, "Autres"))
 
 # Df migration
 
@@ -273,17 +284,25 @@ couleurs = c("#7f7f7f", "#ffef6c", "#f7b905", "#ff7400", "#ff0000", "#950000")
 # Df abondance sur toutes les données
 df_dep = df_sp %>% 
   group_by(dept_code) %>%
-  summarise(n = sum(abondance)) %>%
-  mutate(cl_ab = case_when(n == 0 ~ "0",
+  summarise(n = sum(abondance),
+            nb_jard = n_distinct(jardin_id)) %>%
+  mutate(ab_moy = n/nb_jard,
+         cl_ab = case_when(n == 0 ~ "0",
                            n > 0 & n <= 50 ~ "1-50",
                            n > 50 & n <= 100 ~ "51-100",
                            n > 100 & n <= 300 ~ "101-300",
                            n > 300 & n <= 500 ~ "301-500",
-                           n > 500 ~ "+ de 500")) 
+                           n > 500 ~ "+ de 500"),
+         cl_moy = case_when(ab_moy == 0 ~ "0",
+                            ab_moy > 0 & ab_moy <= 2 ~ "1-2",
+                            ab_moy > 2 & ab_moy <= 5 ~ "3-5",
+                            ab_moy > 5 & ab_moy <= 10 ~ "6-10",
+                            ab_moy > 10 ~ "+ de 10")) 
 
 df_dep = df_dep[c(1:6, 29:30, 7:28, 31:96),]
 
 cat_carte_all = c("0", "1-50", "51-100", "101-300", "301-500", "+ de 500")
+cat_carte_all_moy = c("0", "1-2", "3-5", "6-10", "+ de 10")
 
 df_nb_jar_dep = df_sp %>%
   group_by(annee, dept_code) %>%
@@ -352,24 +371,25 @@ if (file.exists("data/rdata/df_heatmap.rds") &
 }else{
   df_heatmap = data.frame()
   
-  for (name in sort(liste_principale, method = "radix")) {
+  for (name in rev(df_repartition$nom_espece)) {
     df_tmp = df_all_sp %>%
       select(participation_id, an_sem, annee, nom_espece, abondance) %>%
-      arrange(nom_espece) %>%
+      arrange(factor(nom_espece, levels = rev(df_repartition$nom_espece))) %>%
       pivot_wider(names_from = nom_espece, values_from = abondance) %>%
       filter(!!sym(name) != 0) %>%
       mutate(participation_id = as.character(participation_id),
              annee = as.character(annee)) %>%
       mutate_if(~ any(is.numeric(.)), ~ if_else(.==0, 0, 1)) %>%
       select(!c(participation_id, an_sem, annee)) %>%
-      summarise(across(where(is.numeric), sum))
+      summarise(across(where(is.numeric), \(x) sum(x, na.rm = TRUE)))
     df_tmp = df_tmp / (df_nbsp_all %>% filter(nom_espece == name))$n
     df_heatmap = rbind(df_heatmap, df_tmp)
   }
   
-  rownames(df_heatmap) = sort(liste_principale, method = "radix")
+  rownames(df_heatmap) = rev(df_repartition$nom_espece)
   df_heatmap = as.matrix(df_heatmap)
   
   saveRDS(object = df_heatmap, file = "data/rdata/df_heatmap.rds")
 }
+
 
