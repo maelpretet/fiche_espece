@@ -153,84 +153,6 @@ ggplotly(gg) %>%
   animation_opts(transition = 0)
 ```
 
-# Tests ab / obs
-
-::::panel-tabset
-
-#### Abondance
-
-:::panel-tabset
-
-### No div
-
-```{r}
-df_ab_tot = df_all_sp %>%
-  mutate(date = as.Date(date_collection)) %>%
-  group_by(date) %>%
-  summarise(n = sum(abondance)) %>%
-  arrange(date)
-
-div_obs = max((df_sp %>% group_by(an_sem) %>% summarise(n = sum(abondance)))$n) /
-  max(df_ab_tot$n)
-
-histo_line(df_histo = df_sp %>% 
-             mutate(date = as.Date(date_collection)) %>%
-             group_by(date) %>%
-             summarise(sum_ab = sum(abondance)),
-           df_ligne = df_ab_tot, div = 1, ytxtsec = "Abondance totale")
-```
-
-### div
-
-```{r}
-histo_line(df_histo = df_sp %>% 
-             mutate(date = as.Date(date_collection)) %>%
-             group_by(date) %>%
-             summarise(sum_ab = sum(abondance)),
-           df_ligne = df_ab_tot, div = div_obs, ytxtsec = "Abondance totale")
-```
-
-:::
-
-#### Observations
-
-:::panel-tabset
-
-### No div
-
-```{r}
-df_ab_tot = df_all_sp %>%
-  mutate(date = as.Date(date_collection)) %>%
-  group_by(date) %>%
-  summarise(n = n()) %>%
-  arrange(date)
-
-div_obs = max((df_sp %>% filter(abondance != 0) %>% group_by(an_sem) %>% summarise(n = n()))$n) /
-  max(df_ab_tot$n)
-
-histo_line(df_histo = df_sp %>% 
-             filter(abondance != 0) %>%
-             mutate(date = as.Date(date_collection)) %>%
-             group_by(date) %>%
-             summarise(sum_ab = n()),
-           df_ligne = df_ab_tot, div = 1, ytxtsec = "Observations totale", ytxt = "Observations")
-```
-
-### div
-
-```{r}
-histo_line(df_histo = df_sp %>% 
-             filter(abondance != 0) %>%
-             mutate(date = as.Date(date_collection)) %>%
-             group_by(date) %>%
-             summarise(sum_ab = n()),
-           df_ligne = df_ab_tot, div = div_obs, ytxtsec = "Observations totale", ytxt = "Observations")
-```
-
-:::
-
-::::
-
 # Répartition {orientation="columns"}
 
 ```{r}
@@ -418,16 +340,30 @@ col_leg[which(legende == sp_name)] = "#d50404"
 gg = ggplot(france) +
   geom_sf(fill = "#f0f0f0", color = "#a0a0a0") +
   geom_point(data = rbind(df_bary_all_sp, df_bary_base),
-             aes(x = longitude, y = latitude, color = nom_espece, frame = annee)) +
+             aes(x = longitude, y = latitude, color = nom_espece, frame = annee,
+                 text = paste0(nom_espece),
+                 customdata = paste0("../out/dashboard_espece_", nom_espece, ".html"))) +
   geom_point(data = df_bary_one_sp,
-             aes(x = longitude, y=latitude, frame = annee),
+             aes(x = longitude, y=latitude, frame = annee,
+                 text = paste0(nom_espece),
+                 customdata = paste0("https://petite-loutre.com/blogs/tout-savoir-sur-les-loutres/photo-bebe-loutre")),
              color = "#d50404") +
   scale_color_manual(values = col_leg) +
   theme_minimal()
 
-gg %>%
-  ggplotly() %>%
+gg = ggplotly(gg, tooltip = "text") %>%
   animation_opts(transition = 0, frame = 1000)
+gg <- htmlwidgets::onRender(gg, "
+     function(el, x) {
+     el.on('plotly_click', function(d) {
+     var url = d.points[0].customdata;
+     //url
+     window.open(url);
+     });
+     }
+     ")
+gg
+
 ```
 
 
@@ -567,10 +503,23 @@ Abondance maximale :
 
 ## Carte d'abondance totale depuis 2019 {height="50%"}
 
+:::panel-tabset
+
+### Totale
+
 ```{r}
 carte_ab(shape_map = france, fill_map = df_dep$cl_ab, fill_color = couleurs,
          fill_cat = cat_carte_all, fill_title = "Abondance entre 2019 et 2024")
 ```
+
+### Relative
+
+```{r}
+carte_ab(shape_map = france, fill_map = df_dep$cl_moy, fill_color = couleurs,
+         fill_cat = cat_carte_all_moy, fill_title = "Abondance relative entre 2019 et 2024")
+```
+
+:::
 
 # Co-occurence
 
@@ -662,12 +611,6 @@ Indice d'activité : observations d'une espèce par semaine / observations total
 
 # Heatmap
 
-## Heatmap
-
-```{r}
-heatmap(df_heatmap, Colv = NA, Rowv = NA)
-```
-
 ## geom_tile
 
 ```{r}
@@ -675,13 +618,98 @@ ggplot(reshape2::melt(df_heatmap), aes(x = Var1, y = Var2, fill = value)) +
   geom_tile(color = "white") +
   theme(axis.title.x = element_blank(),
         axis.title.y = element_blank(),
-        axis.text.x = element_text(size = 8, angle = 90),
-        axis.text.y = element_text(size = 8)) +
-  scale_fill_gradient(low = "white", high = "red") +
+  #       axis.text.x = element_text(size = 8, angle = 90, vjust = 0.4, hjust = 1),
+  #       axis.text.y = element_text(size = 8)) +
+  # scale_fill_gradient2(low = "white", mid = "#ef5a58") +
+        axis.text.x = element_text(size = 8, angle = 90, vjust = 0.4, hjust = 1, colour = "#0ba208"),
+        axis.text.y = element_text(size = 8, color = "#2a7cf3")) +
+  scale_fill_gradient2(low = "white", mid = "#ef5a58", high = "#005be0", midpoint = 0.5) +
   coord_fixed()
 ```
 
-# Test grega
+# Tests
+
+:::::panel-tabset
+
+##### Ab/obs
+
+::::panel-tabset
+
+#### Abondance
+
+:::panel-tabset
+
+### No div
+
+```{r}
+df_ab_tot = df_all_sp %>%
+  mutate(date = as.Date(date_collection)) %>%
+  group_by(date) %>%
+  summarise(n = sum(abondance)) %>%
+  arrange(date)
+
+div_obs = max((df_sp %>% group_by(an_sem) %>% summarise(n = sum(abondance)))$n) /
+  max(df_ab_tot$n)
+
+histo_line(df_histo = df_sp %>% 
+             mutate(date = as.Date(date_collection)) %>%
+             group_by(date) %>%
+             summarise(sum_ab = sum(abondance)),
+           df_ligne = df_ab_tot, div = 1, ytxtsec = "Abondance totale")
+```
+
+### div
+
+```{r}
+histo_line(df_histo = df_sp %>% 
+             mutate(date = as.Date(date_collection)) %>%
+             group_by(date) %>%
+             summarise(sum_ab = sum(abondance)),
+           df_ligne = df_ab_tot, div = div_obs, ytxtsec = "Abondance totale")
+```
+
+:::
+
+#### Observations
+
+:::panel-tabset
+
+### No div
+
+```{r}
+df_ab_tot = df_all_sp %>%
+  mutate(date = as.Date(date_collection)) %>%
+  group_by(date) %>%
+  summarise(n = n()) %>%
+  arrange(date)
+
+div_obs = max((df_sp %>% filter(abondance != 0) %>% group_by(an_sem) %>% summarise(n = n()))$n) /
+  max(df_ab_tot$n)
+
+histo_line(df_histo = df_sp %>% 
+             filter(abondance != 0) %>%
+             mutate(date = as.Date(date_collection)) %>%
+             group_by(date) %>%
+             summarise(sum_ab = n()),
+           df_ligne = df_ab_tot, div = 1, ytxtsec = "Observations totale", ytxt = "Observations")
+```
+
+### div
+
+```{r}
+histo_line(df_histo = df_sp %>% 
+             filter(abondance != 0) %>%
+             mutate(date = as.Date(date_collection)) %>%
+             group_by(date) %>%
+             summarise(sum_ab = n()),
+           df_ligne = df_ab_tot, div = div_obs, ytxtsec = "Observations totale", ytxt = "Observations")
+```
+
+:::
+
+::::
+
+##### Grega
 
 ```{r}
 a = df_sp %>%
@@ -690,7 +718,7 @@ a = df_sp %>%
   filter(n > 5)
 
 df_test_grega = df_all_sp %>%
-  filter(jardin_id %in% a$jardin_id) %>%
+  filter(jardin_id %in% a$jardin_id, abondance != 0) %>%
   mutate(abondance2 = if_else(abondance > 10, 10, abondance)) %>%
   select(nom_espece, abondance, abondance2)
 
@@ -704,4 +732,4 @@ ggplot((df_test_grega %>%filter(nom_espece == sp_name) %>% as.data.frame()),
   coord_flip()
 ```
 
-
+:::::
