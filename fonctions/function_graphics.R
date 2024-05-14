@@ -4,6 +4,39 @@
 #------------- Par années --------------#
 #########################################
 
+# Histogramme
+gg_histo <- function(df_histo, x = "date", y = "sum_ab",
+                     ytxt = "Abondance totale", dmin, dmax){
+  
+  return(ggplot() +
+           geom_bar(data = df_histo, aes(x = !!sym(x), y = !!sym(y)),
+                    color = "#8A173A", fill="#ab0739", stat="identity") +
+           theme_cowplot() +
+           scale_x_date(date_labels = "%Y-%b", date_breaks = "9 months",
+                        limits = c(dmin, dmax)) +
+           theme(axis.title.x = element_blank(),
+                 axis.text.x = element_text(angle = 0, size = 8),
+                 axis.title.y =  element_text(size = 11, color = "#ab0739"),
+                 axis.text.y = element_text(size = 8)) +
+           ylab(ytxt) )
+}
+
+gg_line <- function(df_line, x = "date", y = "n",
+                    xtxt = "Date de collection", ytxt = "Nombre de sessions",
+                    color = "#ff795c", dmin, dmax){
+  ggplot(df_line, aes(x = !!sym(x), y = !!sym(y))) +
+    geom_line(color = color) +
+    theme_cowplot() +
+    scale_x_date(date_labels = "%Y-%b", date_breaks = "9 months",
+                 limits = c(dmin, dmax)) +
+    theme(axis.title.x = element_text(size = 10),
+          axis.text.x = element_text(angle = 0, size = 8),
+          axis.title.y = element_text(size = 9, color = color),
+          axis.text.y = element_text(size = 8)) +
+    xlab(xtxt) +
+    ylab(ytxt)
+}
+
 # Histogramme + line
 histo_line <- function(df_histo, x_h = "date", y_h = "sum_ab",
                        df_ligne, x_l = "date", y_l = "n",

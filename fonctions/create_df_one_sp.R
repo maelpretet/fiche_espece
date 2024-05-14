@@ -250,9 +250,8 @@ df_bary_one_sp <- cbind(bary_function(df = df_sp),
 df_bary_all_sp <- bary_function(df = df_all_sp,
                         gb1 = c("annee", "jardin_id", "latitude",
                                 "longitude", "nom_espece"),
-                        gb2 = c("annee", "nom_espece")) 
-# %>%
-#   mutate(nom_espece = if_else(nom_espece == sp_name, sp_name, "Autres"))
+                        gb2 = c("annee", "nom_espece")) %>%
+  mutate(nom_esp_min = if_else(nom_espece == sp_name, sp_name, "Autres"))
 
 # Df migration
 
@@ -340,7 +339,7 @@ test_hierarchy = data.frame(from = rep(sp_name, nrow(df_oui)),
 test_vertices = data.frame(name = unique(c(as.character(test_hierarchy$from), as.character(test_hierarchy$to))) )
 
 df_tab = df_oui %>%
-  arrange(desc(corr)) %>%
+  arrange(corr) %>%
   mutate(Corrélation = if_else(corr > 30, "Non", "Oui"),
          couleur = if_else(corr < 30, "grey", "#1e39e1"))
 
