@@ -95,6 +95,25 @@ histo_line(df_histo = df_sp %>%
 ```
 
 ```{r}
+#| title: Box
+
+datemin = min(as.Date(df_sp$date_collection)) - 7
+datemax = max(as.Date(df_sp$date_collection)) + 7
+
+gg1 <- gg_histo(df_histo = df_sp %>% 
+      mutate(date = as.Date(date_collection)) %>%
+      group_by(date) %>%
+      summarise(sum_ab = sum(abondance)),
+      dmin = datemin, dmax = datemax)
+
+gg2 <- gg_line(df_line = df_nb_obs_date, dmin = datemin, dmax = datemax)
+
+grid.arrange(gg1, gg2, ncol = 1, heights=c(2, 1))
+
+```
+
+
+```{r}
 #| title: Mois
 
 div_obs = max((df_sp %>%
@@ -283,32 +302,6 @@ ggplot(france) +
 ```
 
 ```{r}
-#| title: Slider_2023
-df_mois = data.frame(mois = c("01", "02", "03", "04", "05", "06",
-                              "07", "08", "09", "10", "11", "12"),
-                     jardin_id = 0,
-                     latitude = NA,
-                     longitude = NA,
-                     sum_ab = 0)
-df_migration = df_sp %>%
-  filter(annee == 2023) %>%
-  mutate(mois = strftime(date_collection, "%m")) %>%
-  group_by(mois, jardin_id, latitude, longitude) %>%
-  summarise(sum_ab = sum(abondance)) %>%
-  filter(sum_ab != 0) %>%
-  dplyr::union(df_mois)
-
-gg =ggplot(france) +
-  geom_sf(fill = "#f0f0f0", color = "#a0a0a0") +
-  geom_point(data = df_migration, aes(x = longitude, y=latitude, frame = mois), color = "red") +
-  theme_minimal()
-
-gg %>%
-  ggplotly()  %>%
-  animation_opts(transition = 0, frame = 1000)
-```
-
-```{r}
 #| title: Barycentre
 
 a = sort(c(sp_name, "Jardins"))
@@ -332,15 +325,15 @@ gg %>%
 ```{r}
 #| title: All.sp.bary
 
-legende = sort(c(unique(df_bary_all_sp$nom_espece), "Jardins"))
+legende = sort(c(unique(df_bary_all_sp$nom_esp_min), "Jardins"))
 col_leg = rep("#5F5F5F", length(legende))
 col_leg[which(legende == "Jardins")] = "#0baaff"
 col_leg[which(legende == sp_name)] = "#d50404"
 
 gg = ggplot(france) +
   geom_sf(fill = "#f0f0f0", color = "#a0a0a0") +
-  geom_point(data = rbind(df_bary_all_sp, df_bary_base),
-             aes(x = longitude, y = latitude, color = nom_espece, frame = annee,
+  geom_point(data = rbind(df_bary_all_sp, (df_bary_base %>% mutate(nom_esp_min = "Jardins")) ),
+             aes(x = longitude, y = latitude, color = nom_esp_min, frame = annee,
                  text = paste0(nom_espece),
                  customdata = paste0("../out/dashboard_espece_", nom_espece, ".html"))) +
   geom_point(data = df_bary_one_sp,
@@ -353,6 +346,7 @@ gg = ggplot(france) +
 
 gg = ggplotly(gg, tooltip = "text") %>%
   animation_opts(transition = 0, frame = 1000)
+
 gg <- htmlwidgets::onRender(gg, "
      function(el, x) {
      el.on('plotly_click', function(d) {
@@ -382,21 +376,6 @@ Nombre de jardins dans lesquels au moins un individu a été observé :
 ### Row 1
 
 :::: panel-tabset
-
-#### Bidule
-
-```{r}
-# # l <- htmltools::tagList()
-# i = 1
-# for (year in c(2019:2024)) {
-#   cat(sprintf(paste0("\n\n##", year, "\n\n")))
-#   x <- gg_carte(an = year, df_sp = df_sp, france = france)
-#   cat(htmltools::renderTags(as.widget(x))$html)
-#   # l[[i]] <- gg_carte(an = year, df_sp = df_sp, france = france)
-#   # i = i+1
-# }
-# # l
-```
 
 
 #### Toutes les cartes
@@ -521,35 +500,31 @@ carte_ab(shape_map = france, fill_map = df_dep$cl_moy, fill_color = couleurs,
 
 :::
 
-# Co-occurence
+# Co-occurence {orientation="columns"}
 
-## Graphes
-
-::: panel-tabset
-```{r}
-mygraph <- graph_from_data_frame(test_hierarchy, vertices=test_vertices )
-
-E(mygraph)$color = test_hierarchy$seuil
-E(mygraph)$weight = test_hierarchy$value/10
-V(mygraph)$label.cex = 0.5
-
-# With igraph: 
-# plot(mygraph, edge.arrow.size=0, vertex.size=2)
-
-```
-
-### 1
+## Heatmap
 
 ```{r}
-plot(mygraph, edge.arrow.size=0, vertex.size=2, layout=layout.circle, vertex.label.dist=0.5)
+ggplot(reshape2::melt(df_heatmap), aes(x = Var1, y = Var2, fill = value)) +
+  geom_tile(color = "white") +
+  theme(axis.title.x = element_blank(),
+        axis.title.y = element_blank(),
+  #       axis.text.x = element_text(size = 8, angle = 90, vjust = 0.4, hjust = 1),
+  #       axis.text.y = element_text(size = 8)) +
+  # scale_fill_gradient2(low = "white", mid = "#ef5a58") +
+        axis.text.x = element_text(size = 8, angle = 90, vjust = 0.4, hjust = 1, colour = "#0ba208"),
+        axis.text.y = element_text(size = 8, color = "#2a7cf3")) +
+  scale_fill_gradient2(low = "white", mid = "#ef5a58", high = "#005be0", midpoint = 0.5) +
+  coord_fixed()
 ```
 
-### 2
+Fréquence d'observation de l'<span style="color:#2a7cf3">espèce 2</span> au même moment que l'<span style="color:#0ba208">espèce 1</span> parmi toutes les observations de l'<span style="color:#0ba208">espèce 1</span>
 
-```{r}
-plot(mygraph, edge.arrow.size=0, vertex.size=2, layout=layout.circle, label.y = 90, vertex.label.dist=0.5,edge.width=E(mygraph)$weight)
-```
-:::
+\begin{equation}
+\frac{Observations_{\textcolor{#0ba208}{espece 1}\textcolor{#2a7cf3}{espece 2}}}{Observations_{\textcolor{#0ba208}{espece 1}}}
+\end{equation}
+
+## Tableau
 
 ```{r}
 
@@ -609,24 +584,6 @@ Abondance totale : nombre total d'individus observés par semaine
 
 Indice d'activité : observations d'une espèce par semaine / observations totale de l'espèce depuis 2019
 
-# Heatmap
-
-## geom_tile
-
-```{r}
-ggplot(reshape2::melt(df_heatmap), aes(x = Var1, y = Var2, fill = value)) +
-  geom_tile(color = "white") +
-  theme(axis.title.x = element_blank(),
-        axis.title.y = element_blank(),
-  #       axis.text.x = element_text(size = 8, angle = 90, vjust = 0.4, hjust = 1),
-  #       axis.text.y = element_text(size = 8)) +
-  # scale_fill_gradient2(low = "white", mid = "#ef5a58") +
-        axis.text.x = element_text(size = 8, angle = 90, vjust = 0.4, hjust = 1, colour = "#0ba208"),
-        axis.text.y = element_text(size = 8, color = "#2a7cf3")) +
-  scale_fill_gradient2(low = "white", mid = "#ef5a58", high = "#005be0", midpoint = 0.5) +
-  coord_fixed()
-```
-
 # Tests
 
 :::::panel-tabset
@@ -677,21 +634,16 @@ histo_line(df_histo = df_sp %>%
 ### No div
 
 ```{r}
-df_ab_tot = df_all_sp %>%
-  mutate(date = as.Date(date_collection)) %>%
-  group_by(date) %>%
-  summarise(n = n()) %>%
-  arrange(date)
-
 div_obs = max((df_sp %>% filter(abondance != 0) %>% group_by(an_sem) %>% summarise(n = n()))$n) /
-  max(df_ab_tot$n)
+  max(df_nb_obs_date$n)
 
 histo_line(df_histo = df_sp %>% 
              filter(abondance != 0) %>%
              mutate(date = as.Date(date_collection)) %>%
              group_by(date) %>%
              summarise(sum_ab = n()),
-           df_ligne = df_ab_tot, div = 1, ytxtsec = "Observations totale", ytxt = "Observations")
+           df_ligne = df_nb_obs_date, div = 1, ytxtsec = "Nombre de sessions d'observations",
+           ytxt = "Nombre d'observations de l'espèce")
 ```
 
 ### div
@@ -702,7 +654,8 @@ histo_line(df_histo = df_sp %>%
              mutate(date = as.Date(date_collection)) %>%
              group_by(date) %>%
              summarise(sum_ab = n()),
-           df_ligne = df_ab_tot, div = div_obs, ytxtsec = "Observations totale", ytxt = "Observations")
+           df_ligne = df_nb_obs_date, div = div_obs, ytxtsec = "Nombre de sessions d'observations",
+           ytxt = "Nombre d'observations de l'espèce")
 ```
 
 :::
@@ -733,3 +686,53 @@ ggplot((df_test_grega %>%filter(nom_espece == sp_name) %>% as.data.frame()),
 ```
 
 :::::
+
+# Histo test
+
+```{r}
+df_histo_test2 = df_all_sp %>%
+  filter(abondance!= 0) %>%
+  group_by(nom_espece) %>%
+  summarise(m_abn = mean(abondance), n = n()) %>%
+  mutate(sd = 1.96*sqrt(m_abn/n)) %>%
+  arrange(desc(m_abn)) %>%
+  as.data.frame()
+
+```
+
+```{r}
+ggplot(df_histo_test2, aes(x = reorder(nom_espece, m_abn))) +
+  geom_bar(aes(weight = m_abn), fill = "#ffae57") +
+  geom_errorbar( aes(x=nom_espece, ymin=m_abn-sd, ymax=m_abn+sd),
+                 width=0.4, colour="#bb680e", alpha=0.9, size=1.3) +
+  coord_flip() +
+  ylab("Espèce") +
+  xlab("Nombre d'individus")
+```
+
+```{r}
+df_histo_test = df_all_sp %>%
+  filter(abondance!= 0) %>%
+  mutate(ab_grega = factor(case_when(abondance == 1 ~ "1",
+                                     abondance <= 4 ~ "2 à 4",
+                                     abondance <= 9 ~ "5 à 9",
+                                     abondance > 9 ~ "+ de 10"),
+                           levels = c("1", "2 à 4", "5 à 9", "+ de 10"))) %>%
+  group_by(nom_espece, ab_grega) %>%
+  summarise(n = n()) %>%
+  group_by(nom_espece) %>%
+  mutate(sum_n = sum(n)) %>%
+  ungroup() %>%
+  mutate(prop_grega = n/sum_n) %>%
+  full_join(df_histo_test2 %>% select(nom_espece, m_abn), by = c("nom_espece" = "nom_espece"))
+
+```
+
+```{r}
+ggplot(df_histo_test, aes(x = reorder(nom_espece, m_abn), fill = ab_grega)) +
+  geom_bar(aes(weight = prop_grega)) +
+  coord_flip() +
+  ylab("Espèce") +
+  xlab("Proportion")
+```
+
